@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#10213b">
+<meta name="description" content="Simulador privado de agrupamentos de varas para equalização da carga de trabalho do primeiro grau do TRT-MG.">
+<title>Equalização da carga de trabalho | TRT-MG</title>
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+<script defer src="vendor/jszip.min.js"></script>
+<script type="module" src="app.mjs"></script>
+</head>
+<body>
+<a class="skip" href="#main">Pular para o conteúdo</a>
+<div class="shell">
+  <aside class="rail" aria-label="Navegação principal">
+    <div class="identity">
+      <div class="identity-mark" aria-hidden="true"><span></span><i></i><b></b></div>
+      <div><strong>TRT-MG</strong><small>Equalização do 1º grau</small></div>
+    </div>
+    <nav class="navigation" aria-label="Áreas do simulador">
+      <a href="#agrupamentos" data-page="agrupamentos" aria-current="page"><span class="icon ico-grid" aria-hidden="true"></span>Agrupamentos</a>
+      <a href="#dados" data-page="dados"><span class="icon ico-data" aria-hidden="true"></span>Base de varas</a>
+      <a href="#metodologia" data-page="metodologia"><span class="icon ico-book" aria-hidden="true"></span>Metodologia</a>
+    </nav>
+    <div class="rail-bottom"><span class="icon ico-lock" aria-hidden="true"></span><div><strong>Acesso privado</strong><small>Dados neste navegador</small></div></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="breadcrumb">Equalização <span aria-hidden="true">/</span> <strong id="crumb">Agrupamentos</strong></div>
+      <div class="top-actions">
+        <button class="button compact" type="button" data-action="import"><span class="icon ico-upload" aria-hidden="true"></span>Importar planilha</button>
+        <button class="button compact export-button" type="button" data-action="export"><span class="icon ico-download" aria-hidden="true"></span>Exportar resultados</button>
+      </div>
+    </header>
+    <main id="main" tabindex="-1">
+      <div id="view"></div>
+    </main>
+  </div>
+</div>
+<dialog id="modal" aria-labelledby="dialog-title">
+  <div class="dialog-head"><h2 id="dialog-title"></h2><button class="button icon-button" type="button" data-action="close" aria-label="Fechar">×</button></div>
+  <div id="dialog-body"></div>
+</dialog>
+<div id="notice" class="toast" role="status" aria-live="polite"></div>
+<noscript>Ative o JavaScript para usar o simulador.</noscript>
+</body>
+</html>
