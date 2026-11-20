@@ -1,6 +1,7 @@
 import { allocate, assignCourt, category, checkDuplicate, court, courtsByCity, createProject, demo, HEADERS, LOWER, makeCSV,
   MAX_GROUP_SIZE, MAX_GROUPS, MAX_ROWS, MIN_GROUP_SIZE, newPlan, parseCSV, propose, rateOf, searchKey, statusText, syncCourtCity,
   totals, uid, UPPER, validName, validateProject } from './model.mjs';
+import { supabase } from './supabase.mjs';
 import { importXlsx } from './xlsx.mjs';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -13,24 +14,20 @@ const percent = value => value === null ? '—' : fmt(value * 100, 2) + '%';
 const points = value => value === null ? '—' : fmt(value * 100, 2) + ' p.p.';
 const icon = name => `<span class="icon ico-${name}" aria-hidden="true"></span>`;
 const button = (label, action, opt = {}) => `<button type="button" class="button ${opt.style ?? ''}" data-action="${action}"${opt.id ? ` data-id="${esc(opt.id)}"` : ''}${opt.ariaLabel ? ` aria-label="${esc(opt.ariaLabel)}"` : ''}${opt.disabled ? ' disabled' : ''}>${opt.icon ? icon(opt.icon) : ''}${esc(label)}</button>`;
-const labels = {agrupamentos:'Agrupamentos', dados:'Base de varas', metodologia:'Metodologia'};
+const labels = {agrupamentos:'Agrupamentos', dados:'Base de varas', metodologia:'Metodologia', usuarios:'Usuários'};
 const view = $('#view');
 const modal = $('#modal');
 const storage = 'trt-mg.equalizacao.agrupamentos.1';
 const maxFile = 8 * 1024 * 1024;
 let state;
-let saving = true;
+let revision;
+let profile;
+let members = [];
+let localProject;
+let saving = false;
 let timer;
-try {
-  const saved = localStorage.getItem(storage);
-  if (saved) state = validateProject(JSON.parse(saved));
-} catch (error) {
-  if (error.name === 'SecurityError') saving = false;
-  else queueMicrotask(() => notify('A sessão anterior não pôde ser recuperada.'));
-}
-state ??= demo();
+let page = 'agrupamentos';
 
-let page = route();
 let search = '';
 let cityRegion = '';
 let movement = '';
@@ -39,11 +36,11 @@ let compareTo = '';
 let report;
 const template = '<a href="modelo-importacao-equalizacao-2025.xlsx" download class="button">' + icon('download') + 'Modelo Excel</a>';
 const byName = (a, b) => a.localeCompare(b, 'pt-BR', {sensitivity:'base'});
-const pageFoot = () => `<p class="page-foot">${saving ? 'Os dados e cenários ficam neste navegador. Baixe o projeto JSON para guardar uma cópia.' : 'O navegador não conseguiu salvar esta sessão. Baixe o projeto JSON para guardar uma cópia.'}</p>`;
+const pageFoot = () => `<p class="page-foot">Os dados e cenários são compartilhados entre os usuários cadastrados.</p>`;
 
 function route() {
   const name = location.hash.slice(1);
-  return Object.hasOwn(labels, name) ? name : 'agrupamentos';
+  return Object.hasOwn(labels, name) && (name !== 'usuarios' || profile?.can_manage_users) ? name : 'agrupamentos';
 }
 
 function notify(message) {
@@ -54,20 +51,31 @@ function notify(message) {
   timer = setTimeout(() => node.classList.remove('shown'), 5000);
 }
 
-function update(next, message) {
-  state = next;
-  try { localStorage.setItem(storage, JSON.stringify(state)); saving = true; }
-  catch { saving = false; }
-  if (modal.open) modal.close();
-  render();
-  if (message) notify(message);
+async function update(next, message) {
+  if (!profile?.can_edit) throw new Error('Seu perfil tem acesso somente para consulta.');
+  if (saving) throw new Error('Aguarde o salvamento em andamento.');
+  saving = true;
+  try {
+    const { data, error } = await supabase.from('equalizacao_project')
+      .update({ payload: next, revision: revision + 1 })
+      .eq('id', true).eq('revision', revision).select('revision').maybeSingle();
+    if (error) throw new Error('Não foi possível salvar. Tente novamente.');
+    if (!data) throw new Error('O projeto foi atualizado por outro usuário ou seu acesso mudou. Recarregue a página antes de editar.');
+    state = next;
+    revision = data.revision;
+    if (modal.open) modal.close();
+    render();
+    if (message) notify(message);
+  } finally {
+    saving = false;
+  }
 }
 
 const active = (data = state) => data.plans.find(plan => plan.id === data.active);
 function editPlan(change, message) {
   const next = structuredClone(state);
   change(active(next), next);
-  update(next, message);
+  return update(next, message);
 }
 
 function regionalGroups(rows) {
@@ -312,11 +320,13 @@ function render() {
   report = {reference, groups, assignment, stats:quality(groups)};
   $('#crumb').textContent = labels[page];
   $('.export-button').disabled = !state.rows.length;
+  $('[data-action="import"]').hidden = !profile.can_edit;
+  $('[data-action="migrate-local"]').hidden = !profile.can_edit || !localProject || revision !== 0;
   for (const link of document.querySelectorAll('.navigation a')) {
     if (link.dataset.page === page) link.setAttribute('aria-current','page');
     else link.removeAttribute('aria-current');
   }
-  view.innerHTML = {agrupamentos:dashboard,dados:dataPage,metodologia:methodologyPage}[page]();
+  view.innerHTML = {agrupamentos:dashboard,dados:dataPage,metodologia:methodologyPage,usuarios:usersPage}[page]();
   renderTable();
 }
 function renderTable() {
@@ -365,7 +375,7 @@ function rowForm(id) {
         try { syncCourtCity(plan, rows, row, item); }
         catch (error) { throw new Error(`Cenário “${plan.name}”. ${error.message}`); }
       }
-      update({...state,rows,plans}, 'Vara salva na base.');
+      return update({...state,rows,plans}, 'Vara salva na base.');
     }, row ? button('Excluir vara','delete-row',{id,style:'danger push'}) : '');
 }
 
@@ -376,7 +386,7 @@ function removeRow(id) {
       const next = structuredClone(state);
       next.rows = next.rows.filter(item => item.id !== id);
       for (const plan of next.plans) for (const group of plan.groups) group.members = group.members.filter(member => member !== id);
-      update(next,'Vara removida.');
+      return update(next,'Vara removida.');
     });
 }
 
@@ -389,7 +399,7 @@ function groupForm(id) {
   openForm(group ? 'Composição do agrupamento' : 'Criar agrupamento',
     'Use a tabela Alocação das varas para incluir, mover ou retirar varas do grupo.',
     body, 'Salvar agrupamento', ({name}) => {
-      editPlan(plan => {
+      return editPlan(plan => {
         name = validName(name,'Nome do agrupamento');
         if (plan.groups.some(item => item.id !== id && searchKey(item.name) === searchKey(name))) throw new Error('Já existe um agrupamento com esse nome neste cenário.');
         if (group) plan.groups.find(item => item.id === id).name = name;
@@ -402,10 +412,9 @@ function removeGroup(id) {
   const effects = group.members.length ? ' As varas ficarão sem grupo neste cenário e poderão ser alocadas novamente.' : '';
   openForm('Remover agrupamento', `O agrupamento “${esc(group.name)}” será removido do cenário ativo.${effects}`, '',
     'Remover agrupamento', () => {
-      editPlan(plan => {
+      return editPlan(plan => {
         plan.groups = plan.groups.filter(item => item.id !== id);
       }, 'Agrupamento removido.');
-      $('[data-action="new-group"]')?.focus({preventScroll:true});
     });
   $('#dialog-form [data-action="close"]')?.focus();
 }
@@ -433,7 +442,7 @@ function suggest() {
       const groups = propose(state.rows,report.reference.rate,limit,{allowMix,keepCityTogether:lockCity,minimum:lower});
       const message = groups.length ? `${groups.length} ${groups.length === 1 ? 'agrupamento sugerido' : 'agrupamentos sugeridos'}.`
         : 'Todas as varas ficaram sem grupo com o mínimo, a composição e os critérios geográficos escolhidos.';
-      editPlan(plan => {
+      return editPlan(plan => {
         plan.groups = groups;
         plan.cityLimit = lockCity ? limit : null;
         plan.minSize = lower;
@@ -467,7 +476,7 @@ function planForm(mode) {
         next.plans.push(plan);
         next.active = plan.id;
       }
-      update(next,'Cenário salvo.');
+      return update(next,'Cenário salvo.');
     });
 }
 function removePlan() {
@@ -475,7 +484,7 @@ function removePlan() {
   openForm('Excluir cenário', `Remover “${esc(active().name)}” e seus agrupamentos.`, '',
     'Excluir cenário', () => {
       const plans = state.plans.filter(plan => plan.id !== state.active);
-      update({...state,plans,active:plans[0].id},'Cenário removido.');
+      return update({...state,plans,active:plans[0].id},'Cenário removido.');
     });
 }
 
@@ -513,13 +522,13 @@ function importForm() {
       }
       if (!form.isConnected || !modal.open) return;
       resetTransient();
-      update(createProject(rows), `${rows.length} ${rows.length === 1 ? 'vara importada' : 'varas importadas'}.`);
+      await update(createProject(rows), `${rows.length} ${rows.length === 1 ? 'vara importada' : 'varas importadas'}.`);
       location.hash = 'dados';
     }, '<div class="push">' + template + '</div>');
 }
 
 function restoreForm() {
-  openForm('Abrir projeto JSON', 'O arquivo substitui a base e os cenários da sessão.',
+  openForm('Abrir projeto JSON', 'O arquivo substitui a base e os cenários compartilhados.',
     '<label class="full">Arquivo do projeto<input name="file" type="file" accept=".json,application/json" required></label>',
     'Abrir projeto', async ({file},form) => {
       const source = decodeText(await fileBytes(file));
@@ -529,15 +538,15 @@ function restoreForm() {
       if (!form.isConnected || !modal.open) return;
       const next = validateProject(data);
       resetTransient();
-      update(next,'Projeto restaurado.');
+      return update(next,'Projeto restaurado.');
     });
 }
 function replaceForm(usingDemo) {
   openForm(usingDemo ? 'Carregar demonstração' : 'Começar com base vazia',
-    usingDemo ? 'Substitua a sessão atual por uma base com dados e nomes fictícios.' : 'Remova a base e os cenários da sessão atual.',
+    usingDemo ? 'Substitua o projeto compartilhado por uma base com dados e nomes fictícios.' : 'Remova a base e os cenários compartilhados atual.',
     '', usingDemo ? 'Carregar demonstração' : 'Criar base vazia', () => {
       resetTransient();
-      update(usingDemo ? demo() : createProject(),usingDemo ? 'Demonstração carregada.' : 'Base vazia criada.');
+      return update(usingDemo ? demo() : createProject(),usingDemo ? 'Demonstração carregada.' : 'Base vazia criada.');
     },button('Baixar projeto atual','backup',{style:'push'}));
 }
 
@@ -565,6 +574,10 @@ function exportResults() {
 }
 
 const actions = {
+  login, logout, 'add-user': addUser,
+  'migrate-local': () => openForm('Publicar projeto deste navegador',
+    'A base de varas e os cenários locais ficarão disponíveis para os usuários cadastrados.',
+    '', 'Publicar projeto', () => update(localProject, 'Projeto publicado na base compartilhada.')),
   import: importForm, restore: restoreForm, export: exportResults, suggest,
   backup: () => download('projeto-agrupamentos.json',JSON.stringify(state,null,2),'application/json'),
   empty: () => replaceForm(false), demo: () => replaceForm(true), close: () => modal.close(),
@@ -575,10 +588,10 @@ const actions = {
   next: () => { tablePage++; renderTable(); $('.pager button:not([disabled])')?.focus(); }
 };
 
-document.addEventListener('click', event => {
+document.addEventListener('click', async event => {
   const control = event.target.closest('[data-action]');
   if (!control || control.disabled) return;
-  try { actions[control.dataset.action]?.(control.dataset.id); }
+  try { await actions[control.dataset.action]?.(control.dataset.id); }
   catch (error) { notify(error.message); }
 });
 document.addEventListener('input', event => {
@@ -587,11 +600,12 @@ document.addEventListener('input', event => {
   tablePage = 0;
   renderTable();
 });
-document.addEventListener('change', event => {
+document.addEventListener('change', async event => {
   const {id,value,dataset} = event.target;
   if (id === 'plan') {
     if (compareTo === value) compareTo = '';
-    update({...state,active:value});
+    try { await update({...state,active:value}); }
+    catch (error) { event.target.value = state.active; notify(error.message); }
     $('#plan')?.focus();
   } else if (id === 'compare') {
     compareTo = value;
@@ -606,7 +620,7 @@ document.addEventListener('change', event => {
     const courtId = dataset.court;
     const subject = active().cityLimit ? 'Cidade' : 'Vara';
     try {
-      editPlan(plan => assignCourt(plan, state.rows, courtId, value),
+      await editPlan(plan => assignCourt(plan, state.rows, courtId, value),
         `${subject} ${value ? 'alocada ao agrupamento.' : 'retirada do agrupamento.'}`);
     } catch (error) {
       event.target.value = report.assignment.get(courtId)?.id ?? '';
@@ -615,15 +629,121 @@ document.addEventListener('change', event => {
     $(`[data-court="${courtId}"]`)?.focus();
   }
 });
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', async () => {
+  if (!profile) return;
   const next = route();
   if (next === page) return;
   page = next;
   search = cityRegion = movement = '';
   tablePage = 0;
   render();
+  if (page === 'usuarios') {
+    try { await loadMembers(); }
+    catch (error) { notify(error.message); }
+  }
   $('#main').focus({preventScroll:true});
   window.scrollTo(0,0);
 });
 
-render();
+initialize().catch(() => {
+  showGate('Não foi possível verificar o acesso. Recarregue a página para tentar novamente.');
+});
+
+function showGate(message, signedIn = false) {
+  $('.shell').hidden = true;
+  $('#gate').hidden = false;
+  $('#login-status').textContent = message;
+  $('#gate [data-action="login"]').hidden = signedIn;
+  $('#gate [data-action="logout"]').hidden = !signedIn;
+}
+
+async function initialize() {
+  const callback = new URLSearchParams(location.search);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    showGate(callback.has('error') ? 'O login com Google não foi concluído. Tente novamente.' :
+      'Entre com a conta Google institucional cadastrada.');
+    return;
+  }
+
+  const { data: member, error: memberError } = await supabase.from('equalizacao_members')
+    .select('email, equalizacao_roles(label, can_edit, can_manage_users)')
+    .eq('email', session.user.email.toLowerCase()).maybeSingle();
+  if (memberError) {
+    showGate('Não foi possível verificar seu cadastro. Recarregue a página para tentar novamente.', true);
+    return;
+  }
+  if (!member?.equalizacao_roles) {
+    showGate('Esta conta Google não está autorizada. Solicite o cadastro do seu e-mail institucional.', true);
+    return;
+  }
+
+  const { data: project, error } = await supabase.from('equalizacao_project')
+    .select('payload, revision').eq('id', true).single();
+  if (error) {
+    showGate('Não foi possível carregar o projeto compartilhado. Recarregue a página.', true);
+    return;
+  }
+
+  state = project.payload ? validateProject(project.payload) : demo();
+  revision = project.revision;
+  profile = member.equalizacao_roles;
+  try {
+    const previous = localStorage.getItem(storage);
+    if (previous) localProject = validateProject(JSON.parse(previous));
+  } catch {}
+  $('[data-page="usuarios"]').hidden = !profile.can_manage_users;
+  page = route();
+  if (page === 'usuarios') await loadMembers();
+  render();
+  $('#gate').hidden = true;
+  $('.shell').hidden = false;
+}
+
+async function login() {
+  const redirectTo = new URL(location.pathname, location.origin).href;
+  const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, scopes: 'openid', queryParams: { prompt: 'select_account' } } });
+  if (error) showGate('Não foi possível iniciar o login com Google.');
+}
+
+async function logout() {
+  const { error } = await supabase.auth.signOut({ scope: 'local' });
+  if (error) {
+    if (profile) notify('Não foi possível encerrar a sessão. Tente novamente.');
+    else showGate('Não foi possível encerrar a sessão. Tente novamente.', true);
+    return;
+  }
+  location.replace(location.pathname);
+}
+
+async function loadMembers() {
+  const { data, error } = await supabase.from('equalizacao_members')
+    .select('email, equalizacao_roles(label)').order('email');
+  if (error) throw new Error('Não foi possível consultar os usuários cadastrados.');
+  members = data;
+  if (page === 'usuarios') render();
+}
+
+function usersPage() {
+  const body = members.map(member => `<tr><td>${esc(member.email)}</td><td>${esc(member.equalizacao_roles.label)}</td></tr>`).join('');
+  return `<section class="panel"><h1>Usuários</h1>
+    <p>Cadastre o e-mail Google institucional para liberar o acesso ao projeto.</p>
+    ${button('Adicionar usuário','add-user',{style:'primary'})}
+    ${table(th('E-mail') + th('Perfil'), body, 'Nenhum usuário cadastrado.')}
+  </section>`;
+}
+
+function addUser() {
+  openForm('Adicionar usuário', 'O usuário receberá o perfil Padrão.',
+    input('E-mail institucional','email','','type="email" maxlength="254" required'),
+    'Cadastrar', async ({email}) => {
+      const { error } = await supabase.from('equalizacao_members').insert({ email: email.trim().toLowerCase() });
+      if (error?.code === '23505') throw new Error('Este e-mail já está cadastrado.');
+      if (error?.code === '42501') throw new Error('Use um e-mail do domínio autorizado.');
+      if (error) throw new Error('Não foi possível cadastrar o usuário. Tente novamente.');
+      modal.close();
+      notify('Usuário cadastrado.');
+      try { await loadMembers(); }
+      catch (error) { notify(error.message); }
+    });
+}
