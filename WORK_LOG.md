@@ -32,3 +32,13 @@ As ferramentas crapper, dryer e mutator não estão disponíveis nesta sessão. 
 ## Sincronização com GitHub — 23/11/2026
 
 Publicação solicitada explicitamente pelo usuário. Conferido o estado de `origin/main` e preservados os arquivos próprios do repositório. Sincronizados os arquivos da versão publicada: filtro de varas sem grupo, sugestões parciais por distância, cálculo em worker e máximo de grupos parametrizável. Os 19 testes, a sintaxe do aplicativo e a verificação de whitespace passaram antes do commit e envio.
+
+
+## Proximidade, vizinhança e teto interno — 23/11/2026
+
+1. Testes escritos antes da implementação para cadeia conectada, mínimo de vizinhas por cidade, exceção de uma cidade, componentes desconectados e persistência/validação. A execução inicial falhou em três comportamentos novos.
+2. Implementada rede conectada por proximidade com mínimo de vizinhas distintas e teto entre todos os pares. Grupos intermediários podem não cumprir o grau mínimo, mas não são selecionados antes de cumprir todas as regras. Alta e baixa movimentação permanecem obrigatórias nas sugestões.
+3. Acrescentados os parâmetros ao formulário, worker, cenário, duplicação e exportações. Cenários antigos preservam o limite anterior. A mesma validação cobre sugestões, importação JSON e alocação manual.
+4. A seleção passou a priorizar varas alocadas, depois cobertura na faixa e compactação. Mantidos o aviso de resultado parcial, cancelamento e limite de 20 segundos.
+5. Conferidos os testes, a sintaxe e o diff; ferramentas crapper, dryer e mutator continuam indisponíveis nesta sessão.
+6. No navegador, conferidos os três campos, sua persistência e a cadeia Belo Horizonte–Contagem–Betim com proximidade de 20 km, mínimo de uma vizinha e teto de 35 km. As três varas ficaram no mesmo grupo, com alta/baixa e distância máxima observada de 29,3 km. Base e persistência de teste; arquivos temporários removidos antes do empacotamento.

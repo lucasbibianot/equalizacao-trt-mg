@@ -112,3 +112,52 @@ test('Distância aceita base maior que a capacidade e mantém cidades grandes in
   for (const group of groups) assert.ok(group.members.every(id=>rows.slice(3).some(row=>row.id===id)));
   assert.deepEqual(propose(rows,100,2,{geography:'distance',distanceLimitKm:1}),[]);
 });
+
+const chainRows = () => [row('Belo Horizonte',150),row('Contagem',50),row('Betim',150)];
+test('Vizinhança permite cadeia conectada, respeitando o teto entre todos os pares', () => {
+  const rows = chainRows();
+  const groups = propose(rows,totals(rows).rate,10,{geography:'distance',distanceLimitKm:35,proximityLimitKm:20,minNearbyCities:1});
+  assert.equal(groups.flatMap(group=>group.members).length,3);
+  const strict = propose(rows,totals(rows).rate,10,{geography:'distance',distanceLimitKm:25,proximityLimitKm:20,minNearbyCities:1});
+  assert.equal(strict.flatMap(group=>group.members).length,2);
+});
+
+test('Cada cidade precisa do mínimo de vizinhas distintas, sem contar suas próprias varas', () => {
+  const rows = chainRows();
+  const options={geography:'distance',distanceLimitKm:35,proximityLimitKm:20,minNearbyCities:2};
+  assert.deepEqual(propose(rows,totals(rows).rate,10,options),[]);
+  const triangle=propose(rows,totals(rows).rate,10,{...options,proximityLimitKm:35});
+  assert.equal(triangle[0].members.length,3);
+  const single=[row('Belo Horizonte',150),row('Belo Horizonte',50,1)];
+  assert.equal(propose(single,100,10,options)[0].members.length,2);
+});
+
+test('Não reúne componentes desconectados mesmo dentro do teto máximo', () => {
+  const rows=[row('Belo Horizonte',150),row('Contagem',50),row('Uberaba',150),row('Uberlândia',50)];
+  const groups=propose(rows,100,10,{geography:'distance',distanceLimitKm:600,proximityLimitKm:110,minNearbyCities:1,maxGroups:1});
+  assert.equal(groups.length,1);
+  assert.equal(groups[0].members.length,2);
+});
+
+test('Persiste regras de vizinhança, valida importação e alocação manual', () => {
+  const rows=chainRows(), project=createProject(rows), plan=project.plans[0];
+  Object.assign(plan,{geography:'distance',cityLimit:10,maxSize:10,distanceLimitKm:35,proximityLimitKm:20,minNearbyCities:1});
+  plan.groups=propose(rows,totals(rows).rate,10,plan);
+  const restored=validateProject(JSON.parse(JSON.stringify(project)));
+  assert.equal(restored.plans[0].proximityLimitKm,20);
+  assert.equal(restored.plans[0].minNearbyCities,1);
+  const invalid=structuredClone(project);
+  invalid.plans[0].minNearbyCities=2;
+  assert.throws(()=>validateProject(invalid),/vizinhas/);
+  const distant=row('Uberaba',50);
+  assert.throws(()=>assignCourt(plan,[...rows,distant],distant.id,plan.groups[0].id),/limite/);
+  plan.distanceLimitKm=600;
+  assert.throws(()=>assignCourt(plan,[...rows,distant],distant.id,plan.groups[0].id),/rede conectada/);
+  delete plan.proximityLimitKm;
+  delete plan.minNearbyCities;
+  const migrated=validateProject(project);
+  assert.equal(migrated.plans[0].proximityLimitKm,600);
+  assert.equal(migrated.plans[0].minNearbyCities,1);
+  for (const minNearbyCities of [0,1.5,60,NaN]) assert.throws(()=>propose(rows,100,10,{geography:'distance',minNearbyCities}),/vizinhas/);
+  assert.throws(()=>propose(rows,100,10,{geography:'distance',distanceLimitKm:20,proximityLimitKm:30}),/proximidade/);
+});

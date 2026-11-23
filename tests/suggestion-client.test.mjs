@@ -84,4 +84,9 @@ test('Worker real: erro, resultado vazio e nova tentativa com 250 km', async () 
   request.options.maxGroups = 2;
   const groups = await runSuggestion(request,{createWorker});
   assert.deepEqual(new Set(groups.flatMap(group=>group.members)),new Set(rows.map(row=>row.id)));
+  request.rows = ['Belo Horizonte','Contagem','Betim'].map((city,i)=>court({name:city,city,region:'Região',cases:i%2?50:150,judges:1}));
+  Object.assign(request.options,{distanceLimitKm:35,proximityLimitKm:20,minNearbyCities:1});
+  assert.equal((await runSuggestion(request,{createWorker}))[0].members.length,3);
+  request.options.minNearbyCities=2;
+  assert.deepEqual(await runSuggestion(request,{createWorker}),[]);
 });

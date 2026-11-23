@@ -1,5 +1,5 @@
 import { runSuggestion } from './suggestion-client.mjs';
-import { geographicStats, locateCity, distanceKm } from './geography.mjs';
+import { geographicStats, neighborhoodStats, locateCity, distanceKm } from './geography.mjs';
 import { allocate, assignCourt, category, checkDuplicate, court, courtsByCity, createProject, demo, HEADERS, LOWER, makeCSV,
   MAX_GROUP_SIZE, MAX_GROUPS, MAX_GROUP_COUNT, MAX_ROWS, MIN_GROUP_SIZE, newPlan, parseCSV, rateOf, searchKey, statusText, syncCourtCity,
   totals, uid, UPPER, validName, validateProject } from './model.mjs';
@@ -104,7 +104,7 @@ function scenarioBar() {
     <select id="plan">${state.plans.map(plan => `<option value="${plan.id}"${plan.id === state.active ? ' selected' : ''}>${esc(plan.name)}</option>`).join('')}</select>
     ${button('Novo cenário','new-plan',{icon:'plus',style:'compact',disabled:state.plans.length >= 30})}
   </div><div class="context"><span class="pill ${state.type === 'demo' ? 'demo' : ''}">${state.type === 'demo' ? 'Base demonstrativa' : 'Base própria'}</span>
-    ${active().geography === 'distance' ? `<span class="pill">Proximidade · até ${fmt(active().distanceLimitKm)} km</span>` : ''}
+    ${active().geography === 'distance' ? `<span class="pill">Proximidade: ${fmt(active().proximityLimitKm ?? active().distanceLimitKm)} km · mín. ${active().minNearbyCities ?? 1} vizinha(s) · teto: ${fmt(active().distanceLimitKm)} km</span>` : ''}
     ${active().cityLimit ? '<span class="pill">Varas agrupadas por cidade</span>' : ''}<span>Casos novos de conhecimento · 2025</span></div></div>`;
 }
 
@@ -148,6 +148,8 @@ function groupTable(groups, editable) {
     th('Média por juiz',true) + th('% da média geral',true) + th('Faixa') + th('Distância média / máxima') + (editable ? th('Ações') : '');
   return table(head, groups.map(group => {
     const geo = geographicStats(group.rows);
+    const network = editable && active().geography === 'distance' ? neighborhoodStats(group.rows,active().proximityLimitKm ?? active().distanceLimitKm) : null;
+    const neighborNote = network && geo.cities > 1 ? ` · mínimo observado: ${network.minimumNearby ?? '—'} vizinha(s) por cidade · ${network.connected ? 'conectado' : 'desconectado'}` : '';
     const geoNote = geo.missing.length ? 'Coordenadas ausentes: ' + geo.missing.join(', ') : geo.cities === 1 ? 'Uma única cidade' : `${geo.pairs} ${geo.pairs === 1 ? 'par' : 'pares'} de cidades`;
     const regionInfo = group.regions.length ? group.regions.join(' · ') : 'Sem varas';
     const regionNote = group.regions.length > 1 ? ' · cruza subregiões' : '';
@@ -157,7 +159,7 @@ function groupTable(groups, editable) {
       <td class="num">${percent(group.relative)}</td><td>${group.complete
         ? `<span class="pill ${group.status}">${statusText[group.status]}</span>`
         : `<span class="pill demo">Em montagem</span><small class="cell-note">${compositionNeeds(group)}</small>`}</td>
-      <td class="num">${geo.mean === null ? '—' : fmt(geo.mean) + ' km'} / ${geo.maximum === null ? '—' : fmt(geo.maximum) + ' km'}<small class="cell-note">${esc(geoNote)}</small></td>
+      <td class="num">${geo.mean === null ? '—' : fmt(geo.mean) + ' km'} / ${geo.maximum === null ? '—' : fmt(geo.maximum) + ' km'}<small class="cell-note">${esc(geoNote + neighborNote)}</small></td>
       ${editable ? `<td><div class="actions">
         ${button('Composição','edit-group',{id:group.id,style:'compact'})}
         ${button('Remover','delete-group',{id:group.id,style:'compact danger',ariaLabel:`Remover agrupamento ${group.name}`})}
@@ -230,14 +232,14 @@ function regionalDistances() {
   const missing = [...courtsByCity(state.rows).values()].filter(block => !locateCity(block[0].city)).map(block => block[0].city);
   const isolated = active().geography === 'distance' ? [...courtsByCity(state.rows).values()].filter(block => {
     const city = locateCity(block[0].city);
-    return city && !state.rows.some(row => searchKey(row.city) !== searchKey(block[0].city) && locateCity(row.city) && distanceKm(city,locateCity(row.city)) <= active().distanceLimitKm + 1e-9);
+    return city && !state.rows.some(row => searchKey(row.city) !== searchKey(block[0].city) && locateCity(row.city) && distanceKm(city,locateCity(row.city)) <= (active().proximityLimitKm ?? active().distanceLimitKm) + 1e-9);
   }).map(block => block[0].city) : [];
   return `<section class="panel section-gap"><div class="panel-head"><div><h2>Distâncias entre cidades por sub-região</h2>
     <p>Referência para escolher o limiar: média simples de todos os pares de cidades distintas, sem ponderação pelo número de varas.</p></div></div>
     ${table(th('Sub-região') + th('Cidades',true) + th('Com coordenadas',true) + th('Distância média',true) + th('Distância máxima',true),body)}
     <p class="chart-muted">Distâncias em linha reta entre sedes municipais, em km. A distância máxima indica o limiar necessário para reunir toda a sub-região, sujeito aos demais critérios. Não representa trajeto rodoviário.</p>
     ${missing.length ? `<p class="chart-muted">Sem coordenadas: ${esc(missing.join(', '))}. Essas cidades ficam sem agrupamento na sugestão por distância. Confira os nomes cadastrados. Médias parciais consideram somente os pares conhecidos.</p>` : ''}
-    ${isolated.length ? `<p class="chart-muted">Sem outra cidade dentro de ${fmt(active().distanceLimitKm)} km: ${esc(isolated.join(', '))}. As varas da própria cidade ainda podem formar um grupo se atenderem aos demais critérios.</p>` : ''}
+    ${isolated.length ? `<p class="chart-muted">Sem outra cidade dentro de ${fmt(active().proximityLimitKm ?? active().distanceLimitKm)} km: ${esc(isolated.join(', '))}. As varas da própria cidade ainda podem formar um grupo se atenderem aos demais critérios.</p>` : ''}
     </section>`;
 }
 
@@ -347,10 +349,11 @@ function methodologyPage() {
         <p>Alta movimentação inclui varas com casos por juiz iguais ou superiores à média geral. Baixa movimentação inclui as varas abaixo dela. A categoria usa os valores da base, com a mesma referência em todos os cenários.</p>
         <h3>Composição</h3><p>Cada agrupamento precisa de pelo menos uma vara de alta e uma de baixa movimentação. Informe o mínimo de varas ao gerar sugestões. Os grupos montados manualmente ficam em montagem até cumprir os dois critérios.</p></section>
       <section class="panel method"><h2>Distribuição geográfica</h2>
-        <p>A busca avalia combinações com o máximo de grupos e de varas por grupo que você informar. O número de grupos aceita de 1 a ${MAX_GROUP_COUNT}, com ${MAX_GROUPS} como padrão, e é salvo em cada cenário. A alocação de todas as varas é obrigatória. Com cruzamentos permitidos, a busca pode combinar sub-regiões para obter uma composição completa, mesmo que alguns grupos fiquem fora da faixa ideal.</p>
+        <p>A busca avalia combinações com o máximo de grupos e de varas por grupo que você informar. O número de grupos aceita de 1 a ${MAX_GROUP_COUNT}, com ${MAX_GROUPS} como padrão, e é salvo em cada cenário. No modo por sub-região, a alocação de todas as varas é obrigatória. Com cruzamentos permitidos, a busca pode combinar sub-regiões para obter uma composição completa, mesmo que alguns grupos fiquem fora da faixa ideal.</p>
         <h3>Como a busca decide</h3><p>Com a mesma cobertura na faixa, as sugestões priorizam menos subregiões por grupo, menos varas fora da subregião predominante e a alocação de mais varas. Em seguida, buscam aproximar as médias de 100%. O desvio médio é ponderado pelo número de varas de cada grupo.</p>
         <h3>Varas da mesma cidade</h3><p>Com a opção marcada, cada cidade sede é tratada como um bloco na sugestão e nas alterações manuais do cenário. Se a cidade tiver mais varas que o limite por grupo, a sugestão será bloqueada até o ajuste do limite. Com uma única subregião por grupo, cidades cadastradas em mais de uma subregião também impedem uma sugestão completa com a regra de cidade ativa.</p>
-        <h3>Proximidade geográfica</h3><p>O limiar em quilômetros limita a distância entre quaisquer duas cidades do grupo. A busca compara duas alternativas: união dos blocos de cidades mais próximos e união por ganho de cobertura na faixa. Ambas respeitam o limiar entre todos os pares e o máximo de varas. Conserva a alternativa que cobre mais varas na faixa, depois a que aloca mais varas e, no desempate, a mais compacta. Permite alocação parcial, mantendo alta e baixa movimentação em cada grupo e o mínimo de varas; havendo mais grupos que o máximo informado, prioriza a cobertura na faixa e a quantidade de varas. É uma heurística: não garante a melhor composição possível. As sub-regiões não restringem esse modo.</p>
+        <h3>Proximidade geográfica</h3><p>Combine três parâmetros: distância de proximidade, mínimo de cidades vizinhas e distância máxima interna. Cada cidade precisa ter o mínimo informado de outras cidades próximas dentro do grupo, sem contar as varas da própria cidade. A rede de proximidade precisa ser conectada e nenhum par de cidades pode ultrapassar a distância máxima interna. Uma única cidade é dispensada da exigência de vizinhas. Todos os grupos sugeridos precisam reunir alta e baixa movimentação e respeitar os limites de tamanho.</p>
+        <p>A busca compara uniões por proximidade e por equilíbrio de carga. Pode passar por composições intermediárias sem o mínimo de vizinhas para construir grupos válidos maiores; essas composições intermediárias não são aplicadas. Entre as alternativas, prioriza mais varas alocadas, depois a cobertura na faixa e a compactação. Quando há mais grupos que o máximo informado, prioriza também a quantidade de varas alocadas. A sugestão pode ser parcial e não garante o ótimo global. Os parâmetros ficam salvos no cenário, são preservados na duplicação e são conferidos na importação JSON e nas alterações manuais.</p>
         <p>As distâncias são calculadas em linha reta pela fórmula de Haversine, com coordenadas das sedes de 853 municípios de Minas Gerais do <a href="https://github.com/kelvins/municipios-brasileiros" target="_blank" rel="noopener">repositório Municípios Brasileiros</a> (consulta em 23/11/2026). Nomes são comparados sem diferença de acentos ou maiúsculas; cidades não reconhecidas ficam sem agrupamento e são sinalizadas, sem coordenadas estimadas. A base demonstrativa contém cidades fictícias e não serve para testar distâncias reais.</p>
         <h3>Revisão dos grupos</h3><p>A busca testa alternativas e ajustes de composição, incluindo uma busca limitada de alocação integral. No modo por sub-região, uma sugestão só é aplicada quando cobre todas as varas; se não encontrar uma composição completa, preserva o cenário atual. No modo por distância, aplica os grupos encontrados e informa quantas varas ficaram sem agrupamento, inclusive quando nenhuma cidade puder ser agrupada. Isso não comprova inviabilidade matemática. Você também pode gerar sugestões com uma única subregião por grupo.</p></section>
       <section class="panel method"><h2>Base de importação</h2>
@@ -481,14 +484,18 @@ function suggest() {
   const geographyField = `<label class="full">Critério geográfico<select name="geography">
     <option value="regions"${active().geography !== 'distance' ? ' selected' : ''}>Sub-regiões atuais</option>
     <option value="distance"${active().geography === 'distance' ? ' selected' : ''}>Proximidade geográfica</option>
-    </select></label>` + input('Distância máxima entre quaisquer duas cidades (km)','distanceLimitKm',active().distanceLimitKm ?? 100,
+    </select></label>` + input('Distância de proximidade (km)','proximityLimitKm',active().proximityLimitKm ?? active().distanceLimitKm ?? 100,
       'type="number" min="0.1" max="2000" step="0.1" required') +
-    `<p class="form-note full" id="distance-help">Distância em linha reta. Todas as cidades do grupo devem respeitar o limite entre si. As varas da mesma cidade ficam juntas. A busca compara proximidade e equilíbrio de carga, mantendo os critérios de tamanho, alta e baixa movimentação; as varas que não couberem nos grupos ficam sem agrupamento e serão sinalizadas.</p>`;
+    input('Mínimo de cidades vizinhas próximas','minNearbyCities',active().minNearbyCities ?? 1,
+      'type="number" min="1" max="59" step="1" required') +
+    input('Distância máxima entre quaisquer duas cidades (km)','distanceLimitKm',active().distanceLimitKm ?? 250,
+      'type="number" min="0.1" max="2000" step="0.1" required') +
+    `<p class="form-note full" id="distance-help">Distâncias em linha reta. Cada cidade precisa do mínimo de vizinhas distintas dentro da proximidade informada; o grupo deve ficar conectado. Nenhum par pode ultrapassar a distância máxima interna. Grupos de uma única cidade são dispensados da regra de vizinhas. As varas da mesma cidade ficam juntas. A busca compara proximidade e equilíbrio de carga, mantendo os critérios de tamanho, alta e baixa movimentação; as varas que não couberem nos grupos ficam sem agrupamento e serão sinalizadas.</p>`;
   const cityField = `<label class="full checkbox-field"><input type="checkbox" name="keepCityTogether"
     aria-describedby="city-help"${active().cityLimit ? ' checked' : ''}> Manter juntas as varas da mesma cidade</label>
     <p class="form-note full" id="city-help">Cada cidade inteira fica no mesmo agrupamento. No modo por distância, ela também pode ficar inteira sem agrupamento.</p>`;
   openForm('Sugerir agrupamentos', intro, minimumField + maximumField + groupCountField + geographyField + territoryField + cityField,
-    'Gerar sugestões', async ({minimum,maximum,territory,keepCityTogether,geography,distanceLimitKm,maxGroups},form) => {
+    'Gerar sugestões', async ({minimum,maximum,territory,keepCityTogether,geography,distanceLimitKm,maxGroups,proximityLimitKm,minNearbyCities},form) => {
       const allowMix = territory === 'improve';
       const limit = Number(maximum);
       const lower = Number(minimum);
@@ -505,7 +512,7 @@ function suggest() {
       let groups;
       try {
         groups = await runSuggestion({rows:state.rows,reference:report.reference.rate,maximum:limit,
-          options:{allowMix,keepCityTogether:lockCity,minimum:lower,geography,distanceLimitKm:Number(distanceLimitKm),maxGroups:Number(maxGroups)}},
+          options:{allowMix,keepCityTogether:lockCity,minimum:lower,geography,distanceLimitKm:Number(distanceLimitKm),maxGroups:Number(maxGroups),proximityLimitKm:Number(proximityLimitKm),minNearbyCities:Number(minNearbyCities)}},
           {signal:controller.signal});
       } finally {
         modal.removeEventListener('close',cancelSearch);
@@ -526,14 +533,18 @@ function suggest() {
         plan.maxGroups = Number(maxGroups);
         plan.geography = geography;
         plan.distanceLimitKm = geography === 'distance' ? Number(distanceLimitKm) : null;
+        plan.proximityLimitKm = geography === 'distance' ? Number(proximityLimitKm) : null;
+        plan.minNearbyCities = geography === 'distance' ? Number(minNearbyCities) : 1;
       }, message);
     });
   const geographySelect = $('#dialog-form [name="geography"]');
   const refreshGeography = () => {
     const distance = geographySelect.value === 'distance';
-    const limit = $('#dialog-form [name="distanceLimitKm"]');
-    limit.disabled = !distance;
-    limit.closest('label').hidden = !distance;
+    for (const name of ['distanceLimitKm','proximityLimitKm','minNearbyCities']) {
+      const field = $(`#dialog-form [name="${name}"]`);
+      field.disabled = !distance;
+      field.closest('label').hidden = !distance;
+    }
     $('#distance-help').hidden = !distance;
     const territory = $('#dialog-form [name="territory"]');
     territory.disabled = distance;
@@ -570,6 +581,8 @@ function planForm(mode) {
           plan.maxGroups = groupLimit(current);
           plan.geography = current.geography;
           plan.distanceLimitKm = current.distanceLimitKm;
+          plan.proximityLimitKm = current.proximityLimitKm;
+          plan.minNearbyCities = current.minNearbyCities;
         }
         next.plans.push(plan);
         next.active = plan.id;
@@ -660,7 +673,7 @@ function download(name, body, type) {
   setTimeout(() => URL.revokeObjectURL(url),1000);
 }
 function exportResults() {
-  const headline = [...HEADERS,'Categoria','Cenário','Agrupamento','Média do grupo','% da média geral','Faixa do grupo','Média geral','Origem da base','Composição do grupo','Critério geográfico','Limiar (km)','Distância média (km)','Distância máxima (km)'];
+  const headline = [...HEADERS,'Categoria','Cenário','Agrupamento','Média do grupo','% da média geral','Faixa do grupo','Média geral','Origem da base','Composição do grupo','Critério geográfico','Limiar (km)','Distância média (km)','Distância máxima (km)','Distância de proximidade (km)','Mínimo de cidades vizinhas'];
   const rows = state.rows.map(row => {
     const group = report.assignment.get(row.id);
     const rate = rateOf(row);
@@ -668,7 +681,9 @@ function exportResults() {
       group?.name ?? 'Sem grupo',group?.rate,group?.relative == null ? '' : group.relative * 100,group ? statusText[group.status] : '',
       report.reference.rate,state.type === 'demo' ? 'Demonstrativa' : 'Própria',group ? group.complete ? 'Completa' : 'Em montagem' : '',
       active().geography === 'distance' ? 'Proximidade geográfica' : 'Sub-regiões', active().distanceLimitKm ?? '',
-      group ? geographicStats(group.rows).mean : '', group ? geographicStats(group.rows).maximum : ''];
+      group ? geographicStats(group.rows).mean : '', group ? geographicStats(group.rows).maximum : '',
+      active().geography === 'distance' ? active().proximityLimitKm ?? active().distanceLimitKm : '',
+      active().geography === 'distance' ? active().minNearbyCities ?? 1 : ''];
   });
   download('agrupamentos-equalizacao-2025.csv',makeCSV([headline,...rows]),'text/csv;charset=utf-8');
   notify('Resultados exportados.');
