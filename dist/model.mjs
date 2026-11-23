@@ -1,6 +1,6 @@
 import { completeGroups } from './complete-grouping.mjs';
 import { optimizeGroups } from './grouping.mjs';
-import { proximityGroups, validDistance, validNeighborhood, checkDistance } from './geography.mjs';
+import { proximityGroups, geographicGroupPrefix, validDistance, validNeighborhood, checkDistance } from './geography.mjs';
 
 export const uid = () => crypto.randomUUID();
 export const key = value => value.trim().normalize('NFC').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ');
@@ -220,7 +220,7 @@ export function propose(rows, reference, maximum, { allowMix = true, keepCityTog
   const names = new Map();
   return groups.map(group => {
     const pure = group[0].region !== null && group.every(item => item.region === group[0].region);
-    const prefix = geography === 'distance' ? 'Proximidade geográfica' : pure ? group[0].rows[0].region.slice(0, 130) : 'Entre subregiões';
+    const prefix = geography === 'distance' ? geographicGroupPrefix(group.flatMap(item => item.rows)) : pure ? group[0].rows[0].region.slice(0, 130) : 'Entre subregiões';
     const normalized = searchKey(prefix);
     const index = (names.get(normalized) ?? 0) + 1;
     names.set(normalized, index);

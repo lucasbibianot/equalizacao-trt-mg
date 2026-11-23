@@ -42,3 +42,11 @@ Publicação solicitada explicitamente pelo usuário. Conferido o estado de `ori
 4. A seleção passou a priorizar varas alocadas, depois cobertura na faixa e compactação. Mantidos o aviso de resultado parcial, cancelamento e limite de 20 segundos.
 5. Conferidos os testes, a sintaxe e o diff; ferramentas crapper, dryer e mutator continuam indisponíveis nesta sessão.
 6. No navegador, conferidos os três campos, sua persistência e a cadeia Belo Horizonte–Contagem–Betim com proximidade de 20 km, mínimo de uma vizinha e teto de 35 km. As três varas ficaram no mesmo grupo, com alta/baixa e distância máxima observada de 29,3 km. Base e persistência de teste; arquivos temporários removidos antes do empacotamento.
+
+
+## Nomes geográficos por proximidade — 23/11/2026
+
+1. Consultada a API oficial do IBGE para os 853 municípios de MG e suas 12 mesorregiões históricas. Dados associados por código IBGE, sem estimar regiões por coordenadas.
+2. Escritos testes antes da implementação para nomes geográficos, cidade central, estabilidade com a ordem da entrada, transições entre regiões, limite de tamanho e persistência. Os dois testes novos falharam antes da alteração.
+3. Implementado prefixo geográfico com cidade central por menor soma das distâncias entre municípios distintos. Mantida a numeração para diferenciar nomes iguais. Não alterada a regra de composição nem os nomes já salvos; documentado o recorte histórico.
+4. Vinte e cinco testes passaram, com conferência de sintaxe e whitespace. A página de metodologia e o README registram a origem e o critério de escolha dos nomes.

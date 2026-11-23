@@ -161,3 +161,24 @@ test('Persiste regras de vizinhança, valida importação e alocação manual', 
   for (const minNearbyCities of [0,1.5,60,NaN]) assert.throws(()=>propose(rows,100,10,{geography:'distance',minNearbyCities}),/vizinhas/);
   assert.throws(()=>propose(rows,100,10,{geography:'distance',distanceLimitKm:20,proximityLimitKm:30}),/proximidade/);
 });
+
+test('Nomes por proximidade usam região do estado e cidade central, sem depender da sub-região judicial', () => {
+  const rows=[row('Uberaba',150,0,'Sub-região de teste'),row('Uberlândia',50,0,'Outra sub-região')];
+  const groups=propose(rows,100,4,{geography:'distance',distanceLimitKm:250});
+  assert.match(groups[0].name,/Triângulo Mineiro\/Alto Paranaíba/);
+  assert.match(groups[0].name,/Uberaba|Uberlândia/);
+  assert.ok(!groups[0].name.includes('Sub-região de teste'));
+  const reverse=propose([...rows].reverse(),100,4,{geography:'distance',distanceLimitKm:250});
+  assert.equal(groups[0].name,reverse[0].name);
+  const project=createProject(rows);
+  Object.assign(project.plans[0],{geography:'distance',cityLimit:4,maxSize:4,distanceLimitKm:250,groups});
+  assert.equal(validateProject(project).plans[0].groups[0].name,groups[0].name);
+});
+
+test('Nome identifica transição entre regiões e respeita o tamanho permitido', () => {
+  const rows=[row('Belo Horizonte',150),row('Juiz de Fora',50)];
+  const groups=propose(rows,100,4,{geography:'distance',distanceLimitKm:600});
+  assert.match(groups[0].name,/Metropolitana de Belo Horizonte/);
+  assert.match(groups[0].name,/Zona da Mata/);
+  assert.ok(groups[0].name.length<=140);
+});

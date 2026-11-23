@@ -1,8 +1,26 @@
 import municipalities from './municipalities-mg.mjs';
+import { regionNames, municipalRegions } from './municipal-regions-mg.mjs';
 
 const normalize = value => String(value).trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ');
 const coordinates = new Map(municipalities.map(city => [normalize(city.name), city]));
 export const locateCity = name => coordinates.get(normalize(name)) ?? null;
+
+export function geographicGroupPrefix(rows) {
+  const cities = [...new Map(rows.map(row => [normalize(row.city),locateCity(row.city)])).values()]
+    .filter(Boolean).sort((a,b) => a.name.localeCompare(b.name,'pt-BR'));
+  if (!cities.length) return 'Proximidade geográfica';
+  const regions = [...new Set(cities.map(city => regionNames[municipalRegions[city.ibge]]).filter(Boolean))]
+    .sort((a,b) => a.localeCompare(b,'pt-BR'));
+  // Medoid of distinct cities: a large number of courts in one municipality
+  // must not change the geographic label. Ties retain alphabetical ordering.
+  const ranked = cities.map(city => ({city,sum:cities.reduce((sum,other)=>sum+distanceKm(city,other),0)}));
+  ranked.sort((a,b) => Math.abs(a.sum-b.sum) > 1e-9 ? a.sum-b.sum : a.city.name.localeCompare(b.city.name,'pt-BR'));
+  const anchor = ranked[0].city.name;
+  const regionLabel = regions.length ? regions.slice(0,2).join(' + ') + (regions.length > 2 ? ` + outras (${regions.length} regiões)` : '') : 'Proximidade geográfica';
+  const available = 130 - anchor.length - 3;
+  const label = regionLabel.length > available ? regionLabel.slice(0,available-1).trimEnd() + '…' : regionLabel;
+  return `${label} · ${anchor}`;
+}
 
 export function distanceKm(a, b) {
   const rad = degrees => degrees * Math.PI / 180;

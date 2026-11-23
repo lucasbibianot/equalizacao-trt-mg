@@ -59,3 +59,10 @@ Em **Sugerir agrupamentos**, o campo **Máximo de agrupamentos** aceita inteiros
 No modo por distância, cada cidade deve possuir pelo menos `minNearbyCities` outras cidades do mesmo grupo a até `proximityLimitKm` quilômetros. A rede formada por essas ligações deve ser conectada. O teto `distanceLimitKm` vale para quaisquer duas cidades, mesmo sem ligação direta. A proximidade não pode exceder o teto; o mínimo de vizinhas aceita de 1 a 59 e não é reduzido automaticamente para grupos pequenos. Grupos de uma única cidade são dispensados somente da regra de vizinhança: alta/baixa movimentação e tamanho seguem obrigatórios nas sugestões.
 
 Novos cenários oferecem inicialmente proximidade de 100 km, uma vizinha e teto de 250 km no formulário. Cenários antigos sem os novos campos mantêm o comportamento anterior: proximidade igual ao teto salvo e uma vizinha. Os parâmetros são compartilhados pelo Supabase, copiados entre cenários, exportados em CSV/JSON e verificados ao importar JSON e editar alocações. A tabela mostra o menor número observado de vizinhas por cidade e a conectividade; a distância máxima interna continua disponível para revisão. A busca é heurística e pode deixar varas sem grupo.
+
+
+## Nomes geográficos dos grupos
+
+Novas sugestões por proximidade recebem o prefixo da mesorregião do estado e de uma cidade central do grupo. A cidade central é o município que minimiza a soma das distâncias às outras cidades distintas; o número de varas não pondera essa escolha. Empates são resolvidos por ordem alfabética. Grupos com duas mesorregiões mostram os dois nomes; com três ou mais, mostram duas e sinalizam as demais. A numeração evita nomes repetidos.
+
+Referência: mesorregiões geográficas históricas, obtidas na [API de Localidades do IBGE](https://servicodados.ibge.gov.br/api/v1/localidades/estados/31/municipios) em 23/11/2026, com correspondência pelo código IBGE dos 853 municípios de Minas Gerais. A classificação é apenas um rótulo, sem limitar as composições. Cenários existentes e nomes manuais permanecem como foram salvos; o novo nome é gerado ao sugerir novamente.
