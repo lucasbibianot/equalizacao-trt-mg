@@ -1,3 +1,4 @@
+import { generatePdfFile } from './pdf-client.mjs';
 import { runSuggestion } from './suggestion-client.mjs';
 import { geographicStats, neighborhoodStats, locateCity, distanceKm } from './geography.mjs';
 import { allocate, assignCourt, category, checkDuplicate, court, courtsByCity, createProject, demo, HEADERS, LOWER, makeCSV,
@@ -27,6 +28,7 @@ let profile;
 let members = [];
 let localProject;
 let saving = false;
+let generatingPdf = false;
 let timer;
 let page = 'agrupamentos';
 
@@ -370,6 +372,9 @@ function render() {
   report = {reference, groups, assignment, stats:quality(groups)};
   $('#crumb').textContent = labels[page];
   $('.export-button').disabled = !state.rows.length;
+  const pdfButton=$('[data-action="export-pdf"]');
+  pdfButton.disabled=generatingPdf || !state.rows.length;
+  pdfButton.textContent=generatingPdf?'Gerando PDF…':'Gerar PDF';
   $('[data-action="import"]').hidden = !profile.can_edit;
   $('[data-action="migrate-local"]').hidden = !profile.can_edit || !localProject || revision !== 0;
   for (const link of document.querySelectorAll('.navigation a')) {
@@ -673,6 +678,23 @@ function download(name, body, type) {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url),1000);
 }
+async function exportPdf() {
+  if(generatingPdf || !state.rows.length) return;
+  const project=structuredClone(state), projectRevision=revision;
+  generatingPdf=true;
+  const control=$('[data-action="export-pdf"]');
+  control.disabled=true;control.textContent='Gerando PDF…';
+  notify('Preparando relatório completo da base e do cenário ativo…');
+  try {
+    const buffer=await generatePdfFile(project,projectRevision);
+    download('relatorio-equalizacao-2025.pdf',buffer,'application/pdf');
+    notify('PDF gerado com a base completa e o cenário ativo.');
+  } finally {
+    generatingPdf=false;
+    control.disabled=!state.rows.length;control.textContent='Gerar PDF';
+  }
+}
+
 function exportResults() {
   const headline = [...HEADERS,'Categoria','Cenário','Agrupamento','Média do grupo','% da média geral','Faixa do grupo','Média geral','Origem da base','Composição do grupo','Critério geográfico','Limiar (km)','Distância média (km)','Distância máxima (km)','Distância de proximidade (km)','Mínimo de cidades vizinhas'];
   const rows = state.rows.map(row => {
@@ -695,7 +717,7 @@ const actions = {
   'migrate-local': () => openForm('Publicar projeto deste navegador',
     'A base de varas e os cenários locais ficarão disponíveis para os usuários cadastrados.',
     '', 'Publicar projeto', () => update(localProject, 'Projeto publicado na base compartilhada.')),
-  import: importForm, restore: restoreForm, export: exportResults, suggest,
+  import: importForm, restore: restoreForm, export: exportResults, 'export-pdf':exportPdf, suggest,
   backup: () => download('projeto-agrupamentos.json',JSON.stringify(state,null,2),'application/json'),
   empty: () => replaceForm(false), demo: () => replaceForm(true), close: () => modal.close(),
   'add-row': () => rowForm(), 'edit-row':rowForm, 'delete-row':removeRow,

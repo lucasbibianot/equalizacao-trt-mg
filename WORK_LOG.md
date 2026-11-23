@@ -50,3 +50,13 @@ Publicação solicitada explicitamente pelo usuário. Conferido o estado de `ori
 2. Escritos testes antes da implementação para nomes geográficos, cidade central, estabilidade com a ordem da entrada, transições entre regiões, limite de tamanho e persistência. Os dois testes novos falharam antes da alteração.
 3. Implementado prefixo geográfico com cidade central por menor soma das distâncias entre municípios distintos. Mantida a numeração para diferenciar nomes iguais. Não alterada a regra de composição nem os nomes já salvos; documentado o recorte histórico.
 4. Vinte e cinco testes passaram, com conferência de sintaxe e whitespace. A página de metodologia e o README registram a origem e o critério de escolha dos nomes.
+
+## Geração de PDF como funcionalidade — 23/11/2026
+
+1. Esclarecido o escopo: exportação pelo aplicativo, usando a base e o cenário ativos, e não apenas entrega de um arquivo pronto.
+2. Escritos testes antes da implementação para composição do relatório, troca de cenário, ausência de alterações na base, dados demonstrativos e emissão paginada. A execução inicial falhou pela ausência dos módulos a implementar.
+3. Incluídos botão Gerar PDF, snapshot da base/revisão no clique, worker separado da interface com limite de 60 segundos e recuperação após erro. Relatório com três partes, dados completos independentemente dos filtros e identificação de grupos em montagem.
+4. Instaladas versões fixas de jsPDF 4.2.1 e AutoTable 5.0.9, com lockfile. Fontes DejaVu locais preservam acentos, com licenças distribuídas. O build gera o worker pronto para servir, sem dependências externas de execução.
+5. Trinta e um testes passaram. Build, sintaxe e whitespace conferidos. PDF da funcionalidade inspecionado por renderização de todas as páginas; corrigida a paginação para manter composições usuais juntas. Extração de texto e totais conferidos com a base da revisão 165, apenas para validação local, sem incluir dados reais no código.
+6. No navegador, o botão baixou o PDF com uma base de quatro varas. Com o filtro Sem agrupamento exibindo apenas duas, o PDF manteve as quatro e o cenário selecionado. Arquivo baixado lido e conferido. Base/persistência simuladas; nenhum dado compartilhado foi alterado. Removidos os arquivos temporários do checkout antes da publicação.
+7. Crapper, dryer e mutator indisponíveis; realizada revisão do diff e testes comportamentais.

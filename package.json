@@ -1,11 +1,13 @@
 {
   "dependencies": {
-    "@supabase/supabase-js": "2.119.2"
+    "@supabase/supabase-js": "2.119.2",
+    "jspdf": "4.2.1",
+    "jspdf-autotable": "5.0.9"
   },
   "devDependencies": {
     "esbuild": "0.28.1"
   },
   "scripts": {
-    "build": "esbuild src/supabase.mjs --bundle --format=esm --minify --legal-comments=eof --outfile=dist/supabase.mjs"
+    "build": "esbuild src/supabase.mjs src/pdf-worker.mjs --bundle --format=esm --platform=browser --minify --legal-comments=eof --outdir=dist --out-extension:.js=.mjs"
   }
 }

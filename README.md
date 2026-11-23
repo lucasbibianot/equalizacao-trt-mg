@@ -66,3 +66,9 @@ Novos cenários oferecem inicialmente proximidade de 100 km, uma vizinha e teto 
 Novas sugestões por proximidade recebem o prefixo da mesorregião do estado e de uma cidade central do grupo. A cidade central é o município que minimiza a soma das distâncias às outras cidades distintas; o número de varas não pondera essa escolha. Empates são resolvidos por ordem alfabética. Grupos com duas mesorregiões mostram os dois nomes; com três ou mais, mostram duas e sinalizam as demais. A numeração evita nomes repetidos.
 
 Referência: mesorregiões geográficas históricas, obtidas na [API de Localidades do IBGE](https://servicodados.ibge.gov.br/api/v1/localidades/estados/31/municipios) em 23/11/2026, com correspondência pelo código IBGE dos 853 municípios de Minas Gerais. A classificação é apenas um rótulo, sem limitar as composições. Cenários existentes e nomes manuais permanecem como foram salvos; o novo nome é gerado ao sugerir novamente.
+
+## Relatório PDF na aplicação
+
+O botão **Gerar PDF**, no cabeçalho, baixa um relatório com a base completa, as sub-regiões cadastradas, o cenário ativo e as varas sem agrupamento. Os filtros e a paginação da tela não restringem o relatório. A geração captura os dados e a revisão exibidos no momento do clique, informa data/hora de Brasília, identifica bases demonstrativas e grupos em montagem e não altera a base.
+
+O relatório inclui médias, alta/baixa movimentação, distâncias, parâmetros do cenário, cabeçalhos de continuação e numeração das páginas. A geração ocorre em um Web Worker, com limite de 60 segundos e liberação do botão em caso de erro. Não há envio da base a serviço externo de conversão. As bibliotecas e fontes são distribuídas com a aplicação; licenças em `dist/vendor/`. O build agora gera também `dist/pdf-worker.mjs`; execute `npm ci` e `npm run build` ao modificar o renderizador em `src/pdf-renderer.mjs`.
