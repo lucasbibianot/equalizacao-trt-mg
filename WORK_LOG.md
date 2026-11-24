@@ -60,3 +60,12 @@ Publicação solicitada explicitamente pelo usuário. Conferido o estado de `ori
 5. Trinta e um testes passaram. Build, sintaxe e whitespace conferidos. PDF da funcionalidade inspecionado por renderização de todas as páginas; corrigida a paginação para manter composições usuais juntas. Extração de texto e totais conferidos com a base da revisão 165, apenas para validação local, sem incluir dados reais no código.
 6. No navegador, o botão baixou o PDF com uma base de quatro varas. Com o filtro Sem agrupamento exibindo apenas duas, o PDF manteve as quatro e o cenário selecionado. Arquivo baixado lido e conferido. Base/persistência simuladas; nenhum dado compartilhado foi alterado. Removidos os arquivos temporários do checkout antes da publicação.
 7. Crapper, dryer e mutator indisponíveis; realizada revisão do diff e testes comportamentais.
+
+
+## Região geográfica no cadastro e intercâmbio — 23/11/2026
+
+1. Testes escritos antes da implementação para preenchimento por município, separação da sub-região judicial, informação manual, incompatibilidade, arquivos antigos e round-trip CSV/JSON. Execução inicial falhou pela ausência da nova exportação.
+2. Adicionado geographicRegion ao modelo, cadastro e tabelas de varas, inclusive na alocação manual e na busca. Municípios identificados usam a referência histórica do IBGE existente; cidades desconhecidas aceitam região manual, sem estimativa.
+3. Atualizadas importação CSV/XLSX, exportação CSV/JSON, migração de backups e relatório PDF. Modelo Excel recebeu a sétima coluna opcional e orientação, preservando as 500 fórmulas da coluna F. Conferidos cabeçalhos, fórmulas e renderização da planilha.
+4. Os 35 testes passaram; build e sintaxe conferidos. PDF gerado com a base de validação local: regiões presentes, 15 páginas renderizadas e inspecionadas. Nenhum dado real incluído no repositório. Revisado o diff; whitespace do bundle gerado pertence a strings da dependência, sem alteração manual.
+5. Crapper, dryer e mutator indisponíveis nesta sessão. Commit e push na main autorizados explicitamente pelo usuário após os testes.

@@ -1,6 +1,6 @@
 import { completeGroups } from './complete-grouping.mjs';
 import { optimizeGroups } from './grouping.mjs';
-import { proximityGroups, geographicGroupPrefix, validDistance, validNeighborhood, checkDistance } from './geography.mjs';
+import { proximityGroups, geographicGroupPrefix, geographicRegionForCity, validDistance, validNeighborhood, checkDistance } from './geography.mjs';
 
 export const uid = () => crypto.randomUUID();
 export const key = value => value.trim().normalize('NFC').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ');
@@ -51,7 +51,7 @@ export function makeCSV(rows) {
   }).join(';')).join('\r\n') + '\r\n';
 }
 
-export const HEADERS = ['Vara', 'Cidade sede', 'Subregião', 'Qtde casos novos 2025', 'Qtde juízes', 'Média por juiz'];
+export const HEADERS = ['Vara', 'Cidade sede', 'Subregião', 'Qtde casos novos 2025', 'Qtde juízes', 'Média por juiz', 'Região geográfica'];
 export const MAX_ROWS = 5000;
 export const MIN_GROUP_SIZE = 2;
 export const MAX_GROUP_SIZE = 60;
@@ -70,7 +70,8 @@ const headerKey = value => searchKey(value).replace(/[^a-z0-9]/g, '');
 const aliases = [
   ['vara', 'unidade', 'varadotrabalho'], ['cidadesede', 'cidade', 'municipiosede', 'municipio'],
   ['subregiao', 'subregional'], ['qtdecasosnovos2025', 'casosnovos2025', 'quantidadecasosnovos2025', 'casosnovosconhecimento2025'],
-  ['qtdejuizes', 'juizes', 'quantidadejuizes', 'qtdejuizesfixos'], ['mediaporjuiz', 'casosnovosporjuiz']
+  ['qtdejuizes', 'juizes', 'quantidadejuizes', 'qtdejuizesfixos'], ['mediaporjuiz', 'casosnovosporjuiz'],
+  ['regiaogeografica','mesorregiao','regiaogeograficaibge','regiaodoestado']
 ];
 
 export function court(data) {
@@ -82,9 +83,15 @@ export function court(data) {
   const units = Math.round(capacity * 10000);
   if (!Number.isFinite(capacity) || units <= 0 || units > 10_000_000 || Math.abs(units / 10000 - capacity) > epsilon)
     throw new Error('Informe uma quantidade positiva de juízes, até 1.000 e com até quatro casas decimais.');
+  const city=validName(data.city,'Cidade sede');
+  const officialRegion=geographicRegionForCity(city);
+  const informedRegion=String(data.geographicRegion ?? '').trim();
+  if(officialRegion && informedRegion && searchKey(officialRegion)!==searchKey(informedRegion))
+    throw new Error(`Região geográfica incompatível com ${city}. A referência do IBGE é “${officialRegion}”.`);
+  const geographicRegion=officialRegion || (informedRegion ? validName(informedRegion,'Região geográfica') : '');
   return {
-    id: data.id ?? uid(), name: validName(data.name, 'Vara'), city: validName(data.city, 'Cidade sede'),
-    region: validName(data.region, 'Subregião'), cases: count, judges: units / 10000
+    id: data.id ?? uid(), name: validName(data.name, 'Vara'), city,
+    region: validName(data.region, 'Subregião'), geographicRegion, cases: count, judges: units / 10000
   };
 }
 
@@ -108,7 +115,8 @@ export function parseRecords(records) {
     if ([name, city, region, cases, judges].every(value => String(value ?? '').trim() === '')) continue;
     if (rows.length >= MAX_ROWS) throw new Error('A base aceita até 5.000 varas.');
     try {
-      const row = court({name, city, region, cases, judges});
+      const geographicRegion=positions[6]<0 ? '' : entry[positions[6]] ?? '';
+      const row = court({name, city, region, cases, judges, geographicRegion});
       const label = searchKey(row.name);
       if (seen.has(label)) throw new Error(`A vara “${row.name}” aparece mais de uma vez.`);
       seen.add(label);
@@ -139,6 +147,7 @@ export function totals(rows) {
 export const category = (rate, reference) => reference === null ? null
   : rate >= reference - epsilon ? 'Alta movimentação' : 'Baixa movimentação';
 export const rateOf = row => row.cases / row.judges;
+export const courtExportValues = row => [row.name,row.city,row.region,row.cases,row.judges,rateOf(row),row.geographicRegion ?? geographicRegionForCity(row.city)];
 export const relativeRate = (rate, reference) => rate === null || !reference ? null : rate / reference;
 export function rangeStatus(rate, reference) {
   if (rate === null || reference === null) return 'empty';

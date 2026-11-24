@@ -4,6 +4,10 @@ import { regionNames, municipalRegions } from './municipal-regions-mg.mjs';
 const normalize = value => String(value).trim().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ');
 const coordinates = new Map(municipalities.map(city => [normalize(city.name), city]));
 export const locateCity = name => coordinates.get(normalize(name)) ?? null;
+export const geographicRegionForCity = name => {
+  const city=locateCity(name);
+  return city ? regionNames[municipalRegions[city.ibge]] ?? '' : '';
+};
 
 export function geographicGroupPrefix(rows) {
   const cities = [...new Map(rows.map(row => [normalize(row.city),locateCity(row.city)])).values()]

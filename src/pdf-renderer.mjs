@@ -22,7 +22,8 @@ function cityRows(rows,report,origins=false) {
     const stats=totals(block);
     const high=block.filter(row=>category(rateOf(row),report.reference.rate)==='Alta movimentação').length;
     const origin=origins?'\n'+[...new Set(block.map(row=>row.region))].join(', '):'';
-    return [block[0].city+origin,courtNames(block),n(block.length),n(stats.cases),n(stats.judges,2),n(stats.rate,2),`${high} / ${block.length-high}`];
+    const geographicRegions=[...new Set(block.map(row=>row.geographicRegion).filter(Boolean))].join(' / ') || 'Região não identificada';
+    return [block[0].city+'\n'+geographicRegions+origin,courtNames(block),n(block.length),n(stats.cases),n(stats.judges,2),n(stats.rate,2),`${high} / ${block.length-high}`];
   });
 }
 

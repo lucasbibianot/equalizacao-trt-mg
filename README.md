@@ -72,3 +72,9 @@ Referência: mesorregiões geográficas históricas, obtidas na [API de Localida
 O botão **Gerar PDF**, no cabeçalho, baixa um relatório com a base completa, as sub-regiões cadastradas, o cenário ativo e as varas sem agrupamento. Os filtros e a paginação da tela não restringem o relatório. A geração captura os dados e a revisão exibidos no momento do clique, informa data/hora de Brasília, identifica bases demonstrativas e grupos em montagem e não altera a base.
 
 O relatório inclui médias, alta/baixa movimentação, distâncias, parâmetros do cenário, cabeçalhos de continuação e numeração das páginas. A geração ocorre em um Web Worker, com limite de 60 segundos e liberação do botão em caso de erro. Não há envio da base a serviço externo de conversão. As bibliotecas e fontes são distribuídas com a aplicação; licenças em `dist/vendor/`. O build agora gera também `dist/pdf-worker.mjs`; execute `npm ci` e `npm run build` ao modificar o renderizador em `src/pdf-renderer.mjs`.
+
+## Região geográfica das varas
+
+O cadastro e as listas de varas exibem a região geográfica separada da sub-região judicial, inclusive na alocação manual. Para municípios identificados, ela é preenchida automaticamente pelas mesorregiões históricas do IBGE já usadas nos nomes dos grupos. Cidades não identificadas permitem preenchimento manual; ausência de referência aparece como “Não identificada”. A busca também considera essa região.
+
+A coluna opcional **Região geográfica** integra o modelo Excel e as importações CSV/XLSX. Arquivos antigos continuam aceitos; uma região informada incompatível com o município identificado gera erro com a linha correspondente. CSV, backup JSON e PDF incluem a informação. Backups antigos recebem a região dos municípios identificados ao serem carregados.

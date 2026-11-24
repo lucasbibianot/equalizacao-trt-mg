@@ -1,7 +1,8 @@
+import { regionNames } from './municipal-regions-mg.mjs';
 import { generatePdfFile } from './pdf-client.mjs';
 import { runSuggestion } from './suggestion-client.mjs';
-import { geographicStats, neighborhoodStats, locateCity, distanceKm } from './geography.mjs';
-import { allocate, assignCourt, category, checkDuplicate, court, courtsByCity, createProject, demo, HEADERS, LOWER, makeCSV,
+import { geographicStats, neighborhoodStats, locateCity, distanceKm, geographicRegionForCity } from './geography.mjs';
+import { allocate, assignCourt, category, checkDuplicate, court, courtExportValues, courtsByCity, createProject, demo, HEADERS, LOWER, makeCSV,
   MAX_GROUP_SIZE, MAX_GROUPS, MAX_GROUP_COUNT, MAX_ROWS, MIN_GROUP_SIZE, newPlan, parseCSV, rateOf, searchKey, statusText, syncCourtCity,
   totals, uid, UPPER, validName, validateProject } from './model.mjs';
 import { supabase } from './supabase.mjs';
@@ -289,7 +290,7 @@ function dashboard() {
 
 function filters() {
   const regions = regionalGroups(state.rows);
-  return `<div class="filters"><input id="search" type="search" aria-label="Buscar vara, cidade ou subregião" placeholder="Buscar vara, cidade ou subregião" value="${esc(search)}">
+  return `<div class="filters"><input id="search" type="search" aria-label="Buscar vara, cidade ou região" placeholder="Buscar vara, cidade ou região" value="${esc(search)}">
     <select id="region" aria-label="Filtrar subregião"><option value="">Todas as subregiões</option>
     ${regions.map(region => `<option value="${esc(searchKey(region.name))}"${cityRegion === searchKey(region.name) ? ' selected' : ''}>${esc(region.name)}</option>`).join('')}</select>
     <select id="movement" aria-label="Filtrar movimentação"><option value="">Toda movimentação</option>
@@ -304,7 +305,7 @@ function rowTable() {
   const managing = page === 'agrupamentos';
   const query = searchKey(search);
   const visible = state.rows.filter(row =>
-    [row.name,row.city,row.region].some(value => searchKey(value).includes(query)) &&
+    [row.name,row.city,row.region,row.geographicRegion].some(value => searchKey(value).includes(query)) &&
     (!cityRegion || cityRegion === searchKey(row.region)) &&
     (!movement || movement === category(rateOf(row),report.reference.rate)) &&
     (!managing || assignmentFilter !== 'unassigned' || !report.assignment.has(row.id)))
@@ -317,13 +318,13 @@ function rowTable() {
   const pager = visible.length ? `<div class="pager"><span>Exibindo ${start+1}–${end} de ${fmt(visible.length,0)}</span>${pages > 1 ?
     `<div class="actions">${button('Anterior','prev',{disabled:!tablePage})}${button('Próxima','next',{disabled:tablePage >= pages-1})}</div>` : ''}</div>` : '';
   const places = active().groups;
-  const head = th('Vara') + th('Cidade sede') + th('Subregião') + th('Casos novos 2025',true) + th('Juízes',true) +
+  const head = th('Vara') + th('Cidade sede') + th('Região geográfica') + th('Subregião') + th('Casos novos 2025',true) + th('Juízes',true) +
     th('Média por juiz',true) + th('Categoria') + th(managing ? 'Agrupamento' : 'Ações');
   const body = visible.slice(start,end).map(row => {
     const current = report.assignment.get(row.id);
     const assign = places.length ? `<select class="group-select" data-court="${row.id}" aria-label="${esc('Agrupamento de ' + row.name)}">
       <option value="">Sem grupo</option>${places.map(g => `<option value="${g.id}"${current?.id === g.id ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}</select>` : 'Sem grupo';
-    return `<tr><td>${esc(row.name)}</td><td>${esc(row.city)}</td><td>${esc(row.region)}</td>${num(row.cases,0)}${num(row.judges,4)}
+    return `<tr><td>${esc(row.name)}</td><td>${esc(row.city)}</td><td>${esc(row.geographicRegion || 'Não identificada')}</td><td>${esc(row.region)}</td>${num(row.cases,0)}${num(row.judges,4)}
       ${num(rateOf(row),2)}<td>${movementBadge(row)}</td><td>${managing ? assign : button('Editar','edit-row',{id:row.id,style:'compact'})}</td></tr>`;
   }).join('');
   return table(head, body, state.rows.length ? 'Nenhuma vara corresponde aos filtros.' : 'A base está vazia.') + pager;
@@ -360,7 +361,7 @@ function methodologyPage() {
         <h3>Nomes dos grupos por proximidade</h3><p>Novas sugestões recebem o nome da mesorregião geográfica do IBGE e de uma cidade central do grupo, definida pela menor soma das distâncias às demais cidades distintas. Grupos entre duas regiões mostram ambos os nomes; com mais regiões, o nome sinaliza as demais. A referência usa o recorte histórico de mesorregiões, consultado na <a href="https://servicodados.ibge.gov.br/api/v1/localidades/estados/31/municipios" target="_blank" rel="noopener">API de Localidades do IBGE</a> em 23/11/2026. É apenas uma identificação: não restringe as composições e não usa a sub-região judicial como região do estado. Nomes já salvos ou editados não são alterados automaticamente.</p>
         <h3>Revisão dos grupos</h3><p>A busca testa alternativas e ajustes de composição, incluindo uma busca limitada de alocação integral. No modo por sub-região, uma sugestão só é aplicada quando cobre todas as varas; se não encontrar uma composição completa, preserva o cenário atual. No modo por distância, aplica os grupos encontrados e informa quantas varas ficaram sem agrupamento, inclusive quando nenhuma cidade puder ser agrupada. Isso não comprova inviabilidade matemática. Você também pode gerar sugestões com uma única subregião por grupo.</p></section>
       <section class="panel method"><h2>Base de importação</h2>
-        <p>Informe uma linha por vara com nome, cidade sede, subregião, casos novos de conhecimento de 2025 e quantidade de juízes. Use a mesma base de capacidade para todas as varas. A quantidade deve ser positiva e aceita frações.</p>
+        <p>Informe uma linha por vara com nome, cidade sede, subregião, casos novos de conhecimento de 2025 e quantidade de juízes. A coluna opcional Região geográfica registra a região do estado (mesorregião histórica do IBGE), distinta da sub-região judicial. Para municípios identificados, o valor é preenchido automaticamente e divergências na importação são sinalizadas. Planilhas antigas sem a coluna continuam aceitas. Use a mesma base de capacidade para todas as varas. A quantidade deve ser positiva e aceita frações.</p>
         <h3>Coluna Média por juiz</h3><p>O Excel calcula a coluna a partir dos casos novos e da quantidade de juízes. O simulador recalcula o valor na importação. São aceitos arquivos XLSX e CSV UTF-8.</p></section>
     </div>${pageFoot()}`;
 }
@@ -419,6 +420,9 @@ function rowForm(id) {
   openForm(row ? 'Editar vara' : 'Cadastrar vara', 'Informe os casos novos de conhecimento de 2025 e a quantidade de juízes.',
     input('Vara','name',row?.name,'maxlength="140" required') + input('Cidade sede','city',row?.city,'maxlength="140" required list="cities"') +
     input('Subregião','region',row?.region,'maxlength="140" required list="regions"') +
+    input('Região geográfica (IBGE)','geographicRegion',row?.geographicRegion ?? geographicRegionForCity(row?.city ?? ''),'maxlength="140" list="geographic-regions"') +
+    `<datalist id="geographic-regions">${regionNames.map(name => `<option value="${esc(name)}"></option>`).join('')}</datalist>
+    <p class="form-note full">Região do estado, distinta da sub-região judicial. Preenchida automaticamente para municípios identificados. Para cidade não localizada, informe a região manualmente, se conhecida.</p>` +
     input('Qtde casos novos 2025','cases',row?.cases,'inputmode="numeric" required') +
     input('Qtde juízes','judges',row?.judges?.toString().replace('.', ','),'inputmode="decimal" required') + choose('city','cities') + choose('region','regions'),
     'Salvar vara', data => {
@@ -432,7 +436,21 @@ function rowForm(id) {
       }
       return update({...state,rows,plans}, 'Vara salva na base.');
     }, row ? button('Excluir vara','delete-row',{id,style:'danger push'}) : '');
+  const cityInput=$('#dialog-form [name="city"]');
+  const regionInput=$('#dialog-form [name="geographicRegion"]');
+  let lastOfficial=geographicRegionForCity(cityInput.value);
+  const refreshRegion=()=>{
+    const official=geographicRegionForCity(cityInput.value);
+    if(official) regionInput.value=official;
+    else if(lastOfficial) regionInput.value='';
+    regionInput.readOnly=Boolean(official);
+    regionInput.placeholder=official?'':'Região não identificada automaticamente';
+    lastOfficial=official;
+  };
+  cityInput.addEventListener('input',refreshRegion);
+  refreshRegion();
 }
+
 
 function removeRow(id) {
   const row = state.rows.find(item => item.id === id);
@@ -700,7 +718,7 @@ function exportResults() {
   const rows = state.rows.map(row => {
     const group = report.assignment.get(row.id);
     const rate = rateOf(row);
-    return [row.name,row.city,row.region,row.cases,row.judges,rate,category(rate,report.reference.rate),active().name,
+    return [...courtExportValues(row),category(rate,report.reference.rate),active().name,
       group?.name ?? 'Sem grupo',group?.rate,group?.relative == null ? '' : group.relative * 100,group ? statusText[group.status] : '',
       report.reference.rate,state.type === 'demo' ? 'Demonstrativa' : 'Própria',group ? group.complete ? 'Completa' : 'Em montagem' : '',
       active().geography === 'distance' ? 'Proximidade geográfica' : 'Sub-regiões', active().distanceLimitKm ?? '',
