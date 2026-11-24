@@ -248,13 +248,24 @@ export function assignCourt(plan, rows, courtId, groupId) {
   if (target && plan.cityLimit && available.length + ids.size > plan.cityLimit) {
     throw new Error(`As varas de ${current.city} ultrapassariam o limite de ${plan.cityLimit} no grupo “${target.name}”.`);
   }
-  if (target && plan.geography === 'distance') {
-    const included = new Set([...available, ...ids]);
-    checkDistance(rows.filter(row => included.has(row.id)), plan.distanceLimitKm,plan.proximityLimitKm ?? plan.distanceLimitKm,plan.minNearbyCities ?? 1);
-  }
   for (const group of plan.groups) {
-    group.members = group === target ? [...available, ...ids] : group.members.filter(member => !ids.has(member));
+    const members = group === target ? [...available, ...ids] : group.members.filter(member => !ids.has(member));
+    if (plan.geography === 'distance' && (members.length !== group.members.length || members.some(id => !group.members.includes(id))))
+      group.manualGeography = true;
+    group.members = members;
   }
+}
+
+// Advisory order only: selection and assignment remain explicit user actions.
+export function recommendedGroups(plan, rows, courtId) {
+  const current = rows.find(row => row.id === courtId);
+  if (!current) throw new Error('Selecione uma vara válida.');
+  const reference = totals(rows).rate;
+  const high = category(rateOf(current),reference) === 'Alta movimentação';
+  return allocate(rows,plan.groups,reference,plan.minSize).sort((a,b) => {
+    if (a.rate === null || b.rate === null) return a.rate === b.rate ? a.name.localeCompare(b.name,'pt-BR') : a.rate === null ? 1 : -1;
+    return (high ? a.rate-b.rate : b.rate-a.rate) || a.name.localeCompare(b.name,'pt-BR') || a.id.localeCompare(b.id);
+  });
 }
 
 export function syncCourtCity(plan, rows, previous, item) {
@@ -334,13 +345,14 @@ export function validateProject(data) {
       if (!validId(group.id) || groupIds.has(group.id) || !Array.isArray(group.members))
         throw new Error('Agrupamento inválido no arquivo.');
       if (cityLimit && group.members.length > cityLimit) throw new Error('Um agrupamento excede o limite de varas previsto neste cenário.');
-      if (geography === 'distance') checkDistance(rows.filter(row => group.members.includes(row.id)), distanceLimitKm,proximityLimitKm,minNearbyCities);
+      if (group.manualGeography !== undefined && typeof group.manualGeography !== 'boolean') throw new Error('Exceção geográfica manual inválida.');
+      if (geography === 'distance' && !group.manualGeography) checkDistance(rows.filter(row => group.members.includes(row.id)), distanceLimitKm,proximityLimitKm,minNearbyCities);
       groupIds.add(group.id);
       for (const id of group.members) {
         if (!ids.has(id) || members.has(id)) throw new Error('Vara inexistente ou alocada mais de uma vez no cenário.');
         members.set(id, group.id);
       }
-      return {id:group.id, name:validName(group.name,'Nome do agrupamento'), members:[...group.members]};
+      return {id:group.id, name:validName(group.name,'Nome do agrupamento'), members:[...group.members], ...(group.manualGeography ? {manualGeography:true} : {})};
     });
     if (cityLimit) {
       for (const block of cities.values()) {

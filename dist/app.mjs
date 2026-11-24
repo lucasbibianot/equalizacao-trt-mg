@@ -2,7 +2,7 @@ import { regionNames } from './municipal-regions-mg.mjs';
 import { generatePdfFile } from './pdf-client.mjs';
 import { runSuggestion } from './suggestion-client.mjs';
 import { geographicStats, neighborhoodStats, locateCity, distanceKm, geographicRegionForCity } from './geography.mjs';
-import { allocate, assignCourt, category, checkDuplicate, court, courtExportValues, courtsByCity, createProject, demo, HEADERS, LOWER, makeCSV,
+import { allocate, assignCourt, recommendedGroups, category, checkDuplicate, court, courtExportValues, courtsByCity, createProject, demo, HEADERS, LOWER, makeCSV,
   MAX_GROUP_SIZE, MAX_GROUPS, MAX_GROUP_COUNT, MAX_ROWS, MIN_GROUP_SIZE, newPlan, parseCSV, rateOf, searchKey, statusText, syncCourtCity,
   totals, uid, UPPER, validName, validateProject } from './model.mjs';
 import { supabase } from './supabase.mjs';
@@ -162,7 +162,7 @@ function groupTable(groups, editable) {
       <td class="num">${percent(group.relative)}</td><td>${group.complete
         ? `<span class="pill ${group.status}">${statusText[group.status]}</span>`
         : `<span class="pill demo">Em montagem</span><small class="cell-note">${compositionNeeds(group)}</small>`}</td>
-      <td class="num">${geo.mean === null ? '—' : fmt(geo.mean) + ' km'} / ${geo.maximum === null ? '—' : fmt(geo.maximum) + ' km'}<small class="cell-note">${esc(geoNote + neighborNote)}</small></td>
+      <td class="num">${geo.mean === null ? '—' : fmt(geo.mean) + ' km'} / ${geo.maximum === null ? '—' : fmt(geo.maximum) + ' km'}<small class="cell-note">${esc(geoNote + neighborNote)}${group.manualGeography ? ' · Ajuste manual: regras geográficas dispensadas' : ''}</small></td>
       ${editable ? `<td><div class="actions">
         ${button('Composição','edit-group',{id:group.id,style:'compact'})}
         ${button('Remover','delete-group',{id:group.id,style:'compact danger',ariaLabel:`Remover agrupamento ${group.name}`})}
@@ -278,7 +278,7 @@ function dashboard() {
   <section class="panel section-gap"><div class="panel-head"><div><h2>Alocação das varas</h2><p>Revise a composição de cada grupo por cidade sede, subregião e categoria.</p></div></div>
     ${cityLimit ? `<p class="chart-muted city-note">Ao alterar a alocação de uma vara, todas as varas da mesma cidade mudam juntas. O limite é de ${cityLimit} varas por grupo.</p>` : ''}
     ${aboveLimit.length ? `<p class="chart-muted city-note">O tamanho da cidade excede o limite de varas por grupo em ${esc(aboveLimit.slice(0, 4).map(block => `${block[0].city} (${block.length})`).join(', '))}${aboveLimit.length > 4 ? ` e de mais ${aboveLimit.length - 4} cidades` : ''}.</p>` : ''}
-    ${filters()}<div id="table-zone"></div></section>
+    <p class="chart-muted">Vínculos manuais não são bloqueados pelas regras geográficas. Opções ordenadas pela média atual: menores para varas de alta movimentação e maiores para as de baixa. Grupos vazios ficam ao final. A escolha é sua; a composição de alta e baixa continua indicada no grupo.</p>${filters()}<div id="table-zone"></div></section>
   <section class="panel section-gap"><div class="panel-head"><div><h2>Gerenciar cenário</h2></div></div>
     <div class="actions">${button('Renomear cenário','rename-plan')}${button('Duplicar cenário','copy-plan',{disabled:state.plans.length >= 30 || overLimit})}
     ${button('Excluir cenário','delete-plan',{style:'danger',disabled:state.plans.length < 2})}</div></section>`
@@ -323,7 +323,7 @@ function rowTable() {
   const body = visible.slice(start,end).map(row => {
     const current = report.assignment.get(row.id);
     const assign = places.length ? `<select class="group-select" data-court="${row.id}" aria-label="${esc('Agrupamento de ' + row.name)}">
-      <option value="">Sem grupo</option>${places.map(g => `<option value="${g.id}"${current?.id === g.id ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}</select>` : 'Sem grupo';
+      <option value="">Sem grupo</option>${recommendedGroups(active(),state.rows,row.id).map(g => `<option value="${g.id}"${current?.id === g.id ? ' selected' : ''}>${esc(g.name)} · ${g.rate === null ? 'Sem varas' : 'Média '+fmt(g.rate,2)}${g.manualGeography ? ' · Ajuste manual' : ''}</option>`).join('')}</select>` : 'Sem grupo';
     return `<tr><td>${esc(row.name)}</td><td>${esc(row.city)}</td><td>${esc(row.geographicRegion || 'Não identificada')}</td><td>${esc(row.region)}</td>${num(row.cases,0)}${num(row.judges,4)}
       ${num(rateOf(row),2)}<td>${movementBadge(row)}</td><td>${managing ? assign : button('Editar','edit-row',{id:row.id,style:'compact'})}</td></tr>`;
   }).join('');
@@ -714,7 +714,7 @@ async function exportPdf() {
 }
 
 function exportResults() {
-  const headline = [...HEADERS,'Categoria','Cenário','Agrupamento','Média do grupo','% da média geral','Faixa do grupo','Média geral','Origem da base','Composição do grupo','Critério geográfico','Limiar (km)','Distância média (km)','Distância máxima (km)','Distância de proximidade (km)','Mínimo de cidades vizinhas'];
+  const headline = [...HEADERS,'Categoria','Cenário','Agrupamento','Média do grupo','% da média geral','Faixa do grupo','Média geral','Origem da base','Composição do grupo','Critério geográfico','Limiar (km)','Distância média (km)','Distância máxima (km)','Distância de proximidade (km)','Mínimo de cidades vizinhas','Ajuste geográfico manual'];
   const rows = state.rows.map(row => {
     const group = report.assignment.get(row.id);
     const rate = rateOf(row);
@@ -724,7 +724,7 @@ function exportResults() {
       active().geography === 'distance' ? 'Proximidade geográfica' : 'Sub-regiões', active().distanceLimitKm ?? '',
       group ? geographicStats(group.rows).mean : '', group ? geographicStats(group.rows).maximum : '',
       active().geography === 'distance' ? active().proximityLimitKm ?? active().distanceLimitKm : '',
-      active().geography === 'distance' ? active().minNearbyCities ?? 1 : ''];
+      active().geography === 'distance' ? active().minNearbyCities ?? 1 : '', group?.manualGeography ? 'Sim' : 'Não'];
   });
   download('agrupamentos-equalizacao-2025.csv',makeCSV([headline,...rows]),'text/csv;charset=utf-8');
   notify('Resultados exportados.');

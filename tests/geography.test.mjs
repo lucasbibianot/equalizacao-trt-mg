@@ -80,7 +80,9 @@ test('Preserva grupos equilibrados quando a união mais próxima pioraria a cobe
   }
   const plan = {...createProject(rows).plans[0],geography:'distance',distanceLimitKm:25,cityLimit:60,maxSize:60,groups};
   const bh = groups.find(group => group.members.includes(rows[0].id));
-  assert.throws(() => assignCourt(plan,rows,rows[3].id,bh.id),/ultrapassa o limite/);
+  assignCourt(plan,rows,rows[3].id,bh.id);
+  assert.ok(bh.members.includes(rows[3].id));
+  assert.equal(bh.manualGeography,true);
 });
 
 
@@ -150,9 +152,13 @@ test('Persiste regras de vizinhança, valida importação e alocação manual', 
   invalid.plans[0].minNearbyCities=2;
   assert.throws(()=>validateProject(invalid),/vizinhas/);
   const distant=row('Uberaba',50);
-  assert.throws(()=>assignCourt(plan,[...rows,distant],distant.id,plan.groups[0].id),/limite/);
+  const manualRows=[...rows,distant];
+  assignCourt(plan,manualRows,distant.id,plan.groups[0].id);
+  project.rows=manualRows;
+  assert.equal(plan.groups[0].manualGeography,true);
   plan.distanceLimitKm=600;
-  assert.throws(()=>assignCourt(plan,[...rows,distant],distant.id,plan.groups[0].id),/rede conectada/);
+  assignCourt(plan,manualRows,distant.id,plan.groups[0].id);
+  assert.ok(plan.groups[0].members.includes(distant.id));
   delete plan.proximityLimitKm;
   delete plan.minNearbyCities;
   const migrated=validateProject(project);

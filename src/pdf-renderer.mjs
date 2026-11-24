@@ -114,7 +114,7 @@ function parameters(layout,report) {
   layout.write(`De ${plan.minSize} a ${plan.maxSize} varas por grupo | máximo de ${plan.maxGroups} grupos | ${plan.cityLimit?'varas da mesma cidade mantidas juntas':'alocação individual de varas'}.`,9);
   if(plan.geography==='distance') {
     layout.write(`Proximidade: ${n(plan.proximityLimitKm??plan.distanceLimitKm)} km | mínimo de ${plan.minNearbyCities??1} cidade(s) vizinha(s) | teto entre quaisquer duas cidades: ${n(plan.distanceLimitKm)} km.`,9);
-    layout.write('Cada cidade deve atender ao mínimo de vizinhas e a rede deve ser conectada; uma cidade isolada no grupo é dispensada da regra de vizinhança. Sugestões por distância podem deixar varas sem agrupamento.');
+    layout.write('Na sugestão automática, cada cidade deve atender ao mínimo de vizinhas e a rede deve ser conectada; uma cidade isolada no grupo é dispensada da regra de vizinhança. Sugestões por distância podem deixar varas sem agrupamento. Ajustes manuais são dispensados das regras geográficas, mantendo as distâncias observadas no relatório.');
   } else layout.write('Critério: sub-regiões cadastradas. Os agrupamentos podem combinar sub-regiões conforme a composição salva.');
 }
 
@@ -144,7 +144,7 @@ export function renderReportPdf(report,fonts) {
   l.page();l.title('Parte II | Cenário ativo');l.write(report.plan.name,12,{bold:true});
   parameters(l,report);overview(l,report.plan.groups,report,true);
   for(const [i,group] of report.plan.groups.entries()) {
-    composition(l,group,report,`G${String(i+1).padStart(2,'0')} | ${group.name}`);
+    composition(l,group,report,`G${String(i+1).padStart(2,'0')} | ${group.name}${group.manualGeography ? ' | Ajuste manual' : ''}`);
   }
   l.page();l.title('Parte III | Varas sem agrupamento');
   l.write(`${report.unassigned.rows.length} varas permanecem sem grupo no cenário ativo. Elas continuam na base e nas sub-regiões da Parte I. A ausência de alocação não comprova impossibilidade de agrupamento com outra composição ou outros parâmetros.`);

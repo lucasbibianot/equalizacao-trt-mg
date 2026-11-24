@@ -69,3 +69,15 @@ Publicação solicitada explicitamente pelo usuário. Conferido o estado de `ori
 3. Atualizadas importação CSV/XLSX, exportação CSV/JSON, migração de backups e relatório PDF. Modelo Excel recebeu a sétima coluna opcional e orientação, preservando as 500 fórmulas da coluna F. Conferidos cabeçalhos, fórmulas e renderização da planilha.
 4. Os 35 testes passaram; build e sintaxe conferidos. PDF gerado com a base de validação local: regiões presentes, 15 páginas renderizadas e inspecionadas. Nenhum dado real incluído no repositório. Revisado o diff; whitespace do bundle gerado pertence a strings da dependência, sem alteração manual.
 5. Crapper, dryer e mutator indisponíveis nesta sessão. Commit e push na main autorizados explicitamente pelo usuário após os testes.
+
+
+## Vínculos manuais e recomendação por média — 23/11/2026
+
+1. Revisada a validação de atribuição e restauração: retirar apenas a verificação no clique não seria suficiente, pois a validação do projeto bloquearia salvar/reabrir. Identificada também a restrição de conectividade que impediria incluir uma cidade isolada.
+2. Escritos testes antes do código para vínculo distante, persistência, separação da sugestão automática, remoção de cidade intermediária e recomendação por média. Execução inicial falhou pela ausência de recommendedGroups.
+3. Ajustes manuais registram exceção geográfica nos grupos alterados; preservados tamanho, cidade inteira e indicador de composição alta/baixa. Exceção validada como booleana, persistida em JSON/base e indicada na tela, no CSV e no PDF. Sugestões automáticas continuam estritas, sem herdar exceções.
+4. Opções ordenadas pela média ponderada atual, crescente para alta e decrescente para baixa; vazios ao final, sem mutação ou atribuição automática. Incluídos testes de capacidade, cidade inteira e composição incompleta. Atualizados os testes antigos cujas expectativas de bloqueio manual foram substituídas pelo requisito atual.
+5. Os 39 testes passaram, incluindo worker real e PDF. Build, sintaxe e diff conferidos. Crapper, dryer e mutator indisponíveis na sessão. Não realizada nova verificação no navegador.
+6. Alteração preparada em commit local. Push na main e publicação aguardam autorização, conforme preferência expressa do usuário de perguntar antes de novo push na main.
+
+7. Usuário autorizou expressamente o push e a publicação na resposta “Sim”.
