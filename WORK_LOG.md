@@ -95,3 +95,8 @@ Publicação solicitada explicitamente pelo usuário. Conferido o estado de `ori
 1. Identificados filtros que ocultavam grupos incompletos e grupos intermediários quando havia mais de 12. O salvamento já recalculava o relatório e redesenhava a tela.
 2. Extraída a renderização do gráfico para teste, reproduzidas as duas omissões antes da correção. Agora todos os grupos com média aparecem, com indicação de montagem e marcador neutro para composição incompleta.
 3. Verificados vínculos e remoções manuais: vazio → 150% em montagem → 100% completo → 50% em montagem → vazio. Incluída cobertura para 15 grupos.
+
+## 24/11/2026 — Largura da coluna de distâncias
+1. A classe num impunha white-space: nowrap também às notas extensas de distância, conectividade e exceções manuais, expandindo a coluna.
+2. Coluna recebeu largura delimitada e quebra de texto nas notas; valores numéricos permanecem juntos. A regra vale também para a tabela de comparação.
+3. Conferidas sintaxe JavaScript e whitespace. Alteração visual sem novos testes de implementação; publicação aguarda autorização.

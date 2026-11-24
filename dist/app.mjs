@@ -134,7 +134,7 @@ function compositionNeeds(group) {
 
 function groupTable(groups, editable) {
   const head = th('Agrupamento') + th('Varas alta / baixa', true) + th('Casos novos',true) + th('Juízes',true) +
-    th('Média por juiz',true) + th('% da média geral',true) + th('Faixa') + th('Distância média / máxima') + (editable ? th('Ações') : '');
+    th('Média por juiz',true) + th('% da média geral',true) + th('Faixa') + '<th class="distance-cell">Distância média / máxima</th>' + (editable ? th('Ações') : '');
   return table(head, groups.map(group => {
     const geo = geographicStats(group.rows);
     const network = editable && active().geography === 'distance' ? neighborhoodStats(group.rows,active().proximityLimitKm ?? active().distanceLimitKm) : null;
@@ -148,7 +148,7 @@ function groupTable(groups, editable) {
       <td class="num">${percent(group.relative)}</td><td>${group.complete
         ? `<span class="pill ${group.status}">${statusText[group.status]}</span>`
         : `<span class="pill demo">Em montagem</span><small class="cell-note">${compositionNeeds(group)}</small>`}</td>
-      <td class="num">${geo.mean === null ? '—' : fmt(geo.mean) + ' km'} / ${geo.maximum === null ? '—' : fmt(geo.maximum) + ' km'}<small class="cell-note">${esc(geoNote + neighborNote)}${group.manualGeography ? ' · Ajuste manual: regras geográficas dispensadas' : ''}${group.manualSize ? ' · Ajuste manual: máximo de varas dispensado' : ''}</small></td>
+      <td class="num distance-cell"><span class="distance-values">${geo.mean === null ? '—' : fmt(geo.mean) + ' km'} / ${geo.maximum === null ? '—' : fmt(geo.maximum) + ' km'}</span><small class="cell-note">${esc(geoNote + neighborNote)}${group.manualGeography ? ' · Ajuste manual: regras geográficas dispensadas' : ''}${group.manualSize ? ' · Ajuste manual: máximo de varas dispensado' : ''}</small></td>
       ${editable ? `<td><div class="actions">
         ${button('Composição','edit-group',{id:group.id,style:'compact'})}
         ${button('Remover','delete-group',{id:group.id,style:'compact danger',ariaLabel:`Remover agrupamento ${group.name}`})}
