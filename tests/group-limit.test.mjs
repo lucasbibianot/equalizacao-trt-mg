@@ -18,7 +18,7 @@ test('Nove grupos por padrão; dez grupos permitem cobrir todas as cidades', () 
 });
 
 test('Limite configurável também vale para sugestões regionais', () => {
-  assert.throws(()=>propose(rows,100,2),/até 9 grupos/);
+  assert.equal(propose(rows,100,2).flatMap(g=>g.members).length,18);
   const groups = propose(rows,100,2,{maxGroups:10,keepCityTogether:true});
   assert.equal(groups.length,10);
   assert.equal(new Set(groups.flatMap(group=>group.members)).size,20);
@@ -41,3 +41,15 @@ test('Limite deve ser inteiro de 1 a 100, na sugestão e no arquivo', () => {
     assert.throws(()=>validateProject(project),/grupos/);
   }
 });
+
+ test('Região aplica grupos válidos e deixa cidade grande e região sem par fora',()=>{
+ const make=(city,cases,region='R')=>court({name:city+cases,city,cases,judges:1,region});
+ const base=[make('Grande',50),make('Grande',100),make('Grande',150),make('A',50),make('B',150),make('C',150,'Isolada')];
+ const groups=propose(base,100,2,{keepCityTogether:true,allowMix:false});
+ assert.equal(groups.length,1);
+ assert.deepEqual(new Set(groups[0].members),new Set(base.slice(3,5).map(r=>r.id)));
+ for(const geography of ['regions','distance']) {
+  assert.deepEqual(propose(base.slice(0,1),100,2,{geography}),[]);
+  assert.deepEqual(propose(base.filter(r=>r.cases>=100),100,2,{geography}),[]);
+ }
+ });

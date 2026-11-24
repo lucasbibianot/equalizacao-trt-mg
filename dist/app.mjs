@@ -1,3 +1,4 @@
+import {goalsChart} from './goals-chart.mjs';
 import { regionNames } from './municipal-regions-mg.mjs';
 import { generatePdfFile } from './pdf-client.mjs';
 import { runSuggestion } from './suggestion-client.mjs';
@@ -121,21 +122,6 @@ function movementBadge(row) {
   return `<span class="pill ${label === 'Alta movimentação' ? 'high' : 'low'}">${label}</span>`;
 }
 
-function goalsChart(groups) {
-  const plotted = groups.filter(group => group.complete && group.relative !== null);
-  if (!plotted.length) return '<p class="empty">Complete um agrupamento para visualizar sua média no gráfico.</p>';
-  const ordered = [...plotted].sort((a,b) => b.relative - a.relative);
-  const shown = ordered.length > 12 ? [...ordered.slice(0,6), ...ordered.slice(-6)] : ordered;
-  const minimum = Math.max(0, Math.min(.90, Math.floor(Math.min(...shown.map(group => group.relative)) * 10) / 10));
-  const maximum = Math.max(1.10, Math.ceil(Math.max(...shown.map(group => group.relative)) * 10) / 10);
-  const pos = value => (value - minimum) / (maximum - minimum) * 100;
-  return `<div class="goal-chart" style="--l:${pos(LOWER)}%;--m:${pos(1)}%;--u:${pos(UPPER)}%">
-    ${shown.map(group => `<div class="goal-row" title="${esc(group.name)} · ${percent(group.relative)}">
-      <span class="goal-name">${esc(group.name)}</span><span class="goal-track" aria-hidden="true"><i class="goal-point ${group.status}" style="--point:${pos(group.relative)}%"></i></span>
-      <strong>${percent(group.relative)}</strong></div>`).join('')}
-    <div class="goal-row goal-axis" aria-hidden="true"><span></span><div><span>${percent(minimum)}</span><span>${percent(maximum)}</span></div><span></span></div>
-  </div><p class="chart-muted">A área sombreada indica a faixa de 95% a 105% para grupos com composição completa.${shown.length !== ordered.length ? ' O gráfico exibe os seis maiores e os seis menores percentuais.' : ''}</p>`;
-}
 
 function compositionNeeds(group) {
   const needs = [];
@@ -162,7 +148,7 @@ function groupTable(groups, editable) {
       <td class="num">${percent(group.relative)}</td><td>${group.complete
         ? `<span class="pill ${group.status}">${statusText[group.status]}</span>`
         : `<span class="pill demo">Em montagem</span><small class="cell-note">${compositionNeeds(group)}</small>`}</td>
-      <td class="num">${geo.mean === null ? '—' : fmt(geo.mean) + ' km'} / ${geo.maximum === null ? '—' : fmt(geo.maximum) + ' km'}<small class="cell-note">${esc(geoNote + neighborNote)}${group.manualGeography ? ' · Ajuste manual: regras geográficas dispensadas' : ''}</small></td>
+      <td class="num">${geo.mean === null ? '—' : fmt(geo.mean) + ' km'} / ${geo.maximum === null ? '—' : fmt(geo.maximum) + ' km'}<small class="cell-note">${esc(geoNote + neighborNote)}${group.manualGeography ? ' · Ajuste manual: regras geográficas dispensadas' : ''}${group.manualSize ? ' · Ajuste manual: máximo de varas dispensado' : ''}</small></td>
       ${editable ? `<td><div class="actions">
         ${button('Composição','edit-group',{id:group.id,style:'compact'})}
         ${button('Remover','delete-group',{id:group.id,style:'compact danger',ariaLabel:`Remover agrupamento ${group.name}`})}
@@ -265,18 +251,18 @@ function dashboard() {
     ${metric('Grupos dentro da faixa',`${stats.inRange} de ${stats.occupied}`,`${stats.covered} ${stats.covered === 1 ? 'vara' : 'varas'} na faixa · ${stats.unassigned} sem grupo`,'grid')}
     ${metric('Alta / baixa movimentação',`${high} / ${state.rows.length-high}`,`${state.rows.length} varas na base`,'data')}
   </div>
-  ${active().geography === 'distance' && stats.unassigned ? `<p class="panel section-gap" role="status">${stats.unassigned} ${stats.unassigned === 1 ? 'vara está sem agrupamento' : 'varas estão sem agrupamento'} neste cenário por distância. A sugestão pode ser parcial para respeitar os critérios escolhidos. Use o filtro “Sem agrupamento” na lista de varas para revisar.</p>` : ''}
+  ${stats.unassigned ? `<p class="panel section-gap" role="status">${stats.unassigned} ${stats.unassigned === 1 ? 'vara está sem agrupamento' : 'varas estão sem agrupamento'} neste cenário. A sugestão pode ser parcial para respeitar os critérios escolhidos. Use o filtro “Sem agrupamento” na lista de varas para revisar.</p>` : ''}
   <section class="panel"><div class="panel-head"><div><h2>Média dos agrupamentos</h2><p>Percentual da média geral por juiz · Mínimo de ${active().minSize} varas por grupo</p></div>
     <div class="actions"><span class="pill ${overLimit ? 'above' : ''}">${groupCount}</span>${button('Criar agrupamento','new-group',{icon:'plus',style:'primary',disabled:groups.length >= maxGroups})}</div></div>
     ${overLimit ? `<p class="chart-muted">Remova agrupamentos ou gere uma nova sugestão para adequar este cenário ao limite de ${maxGroups}.</p>` : ''}
-    ${goalsChart(groups)}
+    ${goalsChart(groups,{esc,percent})}
     ${stats.occupied || stats.pending ? `<p class="chart-muted">${stats.mixed} ${stats.mixed === 1 ? 'grupo cruza' : 'grupos cruzam'} subregiões${stats.pending ? ` · ${stats.pending} em montagem` : ''}${stats.departure === null ? '' : ' · Distância média até 100% de ' + points(stats.departure)}</p>` : ''}
     <div class="section-gap">${groupTable(groups,true)}</div>
   </section>
   ${regionalDistances()}
   ${comparePanel()}
   <section class="panel section-gap"><div class="panel-head"><div><h2>Alocação das varas</h2><p>Revise a composição de cada grupo por cidade sede, subregião e categoria.</p></div></div>
-    ${cityLimit ? `<p class="chart-muted city-note">Ao alterar a alocação de uma vara, todas as varas da mesma cidade mudam juntas. O limite é de ${cityLimit} varas por grupo.</p>` : ''}
+    ${cityLimit ? `<p class="chart-muted city-note">Ao alterar a alocação de uma vara, todas as varas da mesma cidade mudam juntas. O limite de ${cityLimit} varas vale para a sugestão automática; ajustes manuais podem ultrapassá-lo.</p>` : ''}
     ${aboveLimit.length ? `<p class="chart-muted city-note">O tamanho da cidade excede o limite de varas por grupo em ${esc(aboveLimit.slice(0, 4).map(block => `${block[0].city} (${block.length})`).join(', '))}${aboveLimit.length > 4 ? ` e de mais ${aboveLimit.length - 4} cidades` : ''}.</p>` : ''}
     <p class="chart-muted">Vínculos manuais não são bloqueados pelas regras geográficas. Opções ordenadas pela média atual: menores para varas de alta movimentação e maiores para as de baixa. Grupos vazios ficam ao final. A escolha é sua; a composição de alta e baixa continua indicada no grupo.</p>${filters()}<div id="table-zone"></div></section>
   <section class="panel section-gap"><div class="panel-head"><div><h2>Gerenciar cenário</h2></div></div>
@@ -359,7 +345,7 @@ function methodologyPage() {
         <p>A busca compara uniões por proximidade e por equilíbrio de carga. Pode passar por composições intermediárias sem o mínimo de vizinhas para construir grupos válidos maiores; essas composições intermediárias não são aplicadas. Entre as alternativas, prioriza mais varas alocadas, depois a cobertura na faixa e a compactação. Quando há mais grupos que o máximo informado, prioriza também a quantidade de varas alocadas. A sugestão pode ser parcial e não garante o ótimo global. Os parâmetros ficam salvos no cenário, são preservados na duplicação e são conferidos na importação JSON e nas alterações manuais.</p>
         <p>As distâncias são calculadas em linha reta pela fórmula de Haversine, com coordenadas das sedes de 853 municípios de Minas Gerais do <a href="https://github.com/kelvins/municipios-brasileiros" target="_blank" rel="noopener">repositório Municípios Brasileiros</a> (consulta em 23/11/2026). Nomes são comparados sem diferença de acentos ou maiúsculas; cidades não reconhecidas ficam sem agrupamento e são sinalizadas, sem coordenadas estimadas. A base demonstrativa contém cidades fictícias e não serve para testar distâncias reais.</p>
         <h3>Nomes dos grupos por proximidade</h3><p>Novas sugestões recebem o nome da mesorregião geográfica do IBGE e de uma cidade central do grupo, definida pela menor soma das distâncias às demais cidades distintas. Grupos entre duas regiões mostram ambos os nomes; com mais regiões, o nome sinaliza as demais. A referência usa o recorte histórico de mesorregiões, consultado na <a href="https://servicodados.ibge.gov.br/api/v1/localidades/estados/31/municipios" target="_blank" rel="noopener">API de Localidades do IBGE</a> em 23/11/2026. É apenas uma identificação: não restringe as composições e não usa a sub-região judicial como região do estado. Nomes já salvos ou editados não são alterados automaticamente.</p>
-        <h3>Revisão dos grupos</h3><p>A busca testa alternativas e ajustes de composição, incluindo uma busca limitada de alocação integral. No modo por sub-região, uma sugestão só é aplicada quando cobre todas as varas; se não encontrar uma composição completa, preserva o cenário atual. No modo por distância, aplica os grupos encontrados e informa quantas varas ficaram sem agrupamento, inclusive quando nenhuma cidade puder ser agrupada. Isso não comprova inviabilidade matemática. Você também pode gerar sugestões com uma única subregião por grupo.</p></section>
+        <h3>Revisão dos grupos</h3><p>A busca testa alternativas e ajustes de composição. Em ambos os modos, aplica os grupos encontrados e informa quantas varas ficaram sem agrupamento, inclusive quando nenhuma cidade puder ser agrupada. Isso não comprova inviabilidade matemática. Você também pode gerar sugestões com uma única subregião por grupo.</p></section>
       <section class="panel method"><h2>Base de importação</h2>
         <p>Informe uma linha por vara com nome, cidade sede, subregião, casos novos de conhecimento de 2025 e quantidade de juízes. A coluna opcional Região geográfica registra a região do estado (mesorregião histórica do IBGE), distinta da sub-região judicial. Para municípios identificados, o valor é preenchido automaticamente e divergências na importação são sinalizadas. Planilhas antigas sem a coluna continuam aceitas. Use a mesma base de capacidade para todas as varas. A quantidade deve ser positiva e aceita frações.</p>
         <h3>Coluna Média por juiz</h3><p>O Excel calcula a coluna a partir dos casos novos e da quantidade de juízes. O simulador recalcula o valor na importação. São aceitos arquivos XLSX e CSV UTF-8.</p></section>
@@ -493,7 +479,7 @@ function removeGroup(id) {
 }
 
 function suggest() {
-  const intro = `No modo por distância, a sugestão pode deixar varas sem agrupamento, que serão informadas no resultado. No modo por sub-região, todas as varas devem ser alocadas. Cada grupo precisa reunir varas de alta e de baixa movimentação. O máximo de grupos é ajustável (padrão: ${MAX_GROUPS}). A busca prioriza médias na faixa de 95% a 105% da média geral.` +
+  const intro = `Em ambos os critérios geográficos, a sugestão pode deixar varas sem agrupamento, que serão informadas no resultado. Cada grupo precisa reunir varas de alta e de baixa movimentação. O máximo de grupos é ajustável (padrão: ${MAX_GROUPS}). A busca prioriza médias na faixa de 95% a 105% da média geral.` +
     (active().groups.length ? ' Ao gerar, você substitui a composição do cenário ativo.' : '');
   const minimumField = input('Mínimo de varas por agrupamento','minimum',active().minSize,
     `type="number" min="${MIN_GROUP_SIZE}" max="${MAX_GROUP_SIZE}" required`);
@@ -517,7 +503,7 @@ function suggest() {
     `<p class="form-note full" id="distance-help">Distâncias em linha reta. Cada cidade precisa do mínimo de vizinhas distintas dentro da proximidade informada; o grupo deve ficar conectado. Nenhum par pode ultrapassar a distância máxima interna. Grupos de uma única cidade são dispensados da regra de vizinhas. As varas da mesma cidade ficam juntas. A busca compara proximidade e equilíbrio de carga, mantendo os critérios de tamanho, alta e baixa movimentação; as varas que não couberem nos grupos ficam sem agrupamento e serão sinalizadas.</p>`;
   const cityField = `<label class="full checkbox-field"><input type="checkbox" name="keepCityTogether"
     aria-describedby="city-help"${active().cityLimit ? ' checked' : ''}> Manter juntas as varas da mesma cidade</label>
-    <p class="form-note full" id="city-help">Cada cidade inteira fica no mesmo agrupamento. No modo por distância, ela também pode ficar inteira sem agrupamento.</p>`;
+    <p class="form-note full" id="city-help">Cada cidade inteira fica no mesmo agrupamento. A cidade também pode ficar inteira sem agrupamento em ambos os modos.</p>`;
   openForm('Sugerir agrupamentos', intro, minimumField + maximumField + groupCountField + geographyField + territoryField + cityField,
     'Gerar sugestões', async ({minimum,maximum,territory,keepCityTogether,geography,distanceLimitKm,maxGroups,proximityLimitKm,minNearbyCities},form) => {
       const allowMix = territory === 'improve';

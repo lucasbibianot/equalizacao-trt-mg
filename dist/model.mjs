@@ -1,4 +1,3 @@
-import { completeGroups } from './complete-grouping.mjs';
 import { optimizeGroups } from './grouping.mjs';
 import { proximityGroups, geographicGroupPrefix, geographicRegionForCity, validDistance, validNeighborhood, checkDistance } from './geography.mjs';
 
@@ -191,16 +190,10 @@ export function propose(rows, reference, maximum, { allowMix = true, keepCityTog
   }
   if (!isGroupSize(minimum) || minimum > maximum)
     throw new Error(`O mínimo por agrupamento deve ser um inteiro entre ${MIN_GROUP_SIZE} e ${maximum}.`);
-  if (reference === null || rows.length < minimum) {
-    if (geography === 'distance') return [];
-    throw new Error('A base não tem varas suficientes para formar um agrupamento completo.');
-  }
+  if (reference === null || rows.length < minimum) return [];
   if (!['regions','distance'].includes(geography)) throw new Error('Critério geográfico inválido.');
   if (geography === 'distance') validNeighborhood(distanceLimitKm,proximityLimitKm,minNearbyCities);
   const blocks = (keepCityTogether || geography === 'distance') ? [...courtsByCity(rows).values()] : rows.map(row => [row]);
-  const oversized = blocks.filter(block => block.length > maximum);
-  if (geography === 'regions' && oversized.length) throw new Error(`Não é possível alocar todas as varas: ${oversized.map(block => block[0].city + ' (' + block.length + ' varas)').join(', ')} excede o máximo de ${maximum} varas por grupo. Aumente o máximo por grupo.`);
-  if (geography === 'regions' && rows.length > maximum * maxGroups) throw new Error(`Não é possível alocar as ${rows.length} varas em até ${maxGroups} grupos de ${maximum}. Aumente o máximo de grupos ou de varas por grupo.`);
   const items = blocks.filter(block => block.length <= maximum).map((block, order) => {
     const {cases, judges, rate} = totals(block);
     const high = block.filter(row => category(rateOf(row), reference) === 'Alta movimentação').length;
@@ -215,17 +208,10 @@ export function propose(rows, reference, maximum, { allowMix = true, keepCityTog
       region:regionCounts.size === 1 ? regionCounts.keys().next().value : null, city:searchKey(block[0].city)
     };
   });
-  if (!items.some(item => item.high) || !items.some(item => item.low)) {
-    if (geography === 'distance') return [];
-    throw new Error('Não é possível formar grupos de alta e baixa movimentação: a base não contém ambas as categorias.');
-  }
+  if (!items.some(item => item.high) || !items.some(item => item.low)) return [];
   const band = {lower:reference * LOWER, target:reference, upper:reference * UPPER, minimum};
-  const initial = geography === 'distance' ? proximityGroups(items, maximum, maxGroups, band, distanceLimitKm, proximityLimitKm, minNearbyCities)
+  const groups = geography === 'distance' ? proximityGroups(items, maximum, maxGroups, band, distanceLimitKm, proximityLimitKm, minNearbyCities)
     : optimizeGroups(items, maximum, maxGroups, band, allowMix);
-  if (geography === 'regions' && !allowMix && items.some(item => item.region === null))
-    throw new Error('Uma cidade possui varas em sub-regiões distintas. Permita cruzamentos entre sub-regiões ou reveja a regra de manter a cidade inteira.');
-  const compatible = (a,b) => allowMix || (a.region !== null && a.region === b.region && b.regionCounts.size === 1);
-  const groups = geography === 'distance' ? initial : completeGroups(items,initial,maximum,maxGroups,band,compatible);
   const names = new Map();
   return groups.map(group => {
     const pure = group[0].region !== null && group.every(item => item.region === group[0].region);
@@ -245,13 +231,11 @@ export function assignCourt(plan, rows, courtId, groupId) {
     ? rows.filter(row => searchKey(row.city) === searchKey(current.city)).map(row => row.id)
     : [courtId]);
   const available = target?.members.filter(member => !ids.has(member));
-  if (target && plan.cityLimit && available.length + ids.size > plan.cityLimit) {
-    throw new Error(`As varas de ${current.city} ultrapassariam o limite de ${plan.cityLimit} no grupo “${target.name}”.`);
-  }
   for (const group of plan.groups) {
     const members = group === target ? [...available, ...ids] : group.members.filter(member => !ids.has(member));
     if (plan.geography === 'distance' && (members.length !== group.members.length || members.some(id => !group.members.includes(id))))
       group.manualGeography = true;
+    if (members.length > plan.maxSize) group.manualSize = true;
     group.members = members;
   }
 }
@@ -344,7 +328,8 @@ export function validateProject(data) {
     const groups = plan.groups.map(group => {
       if (!validId(group.id) || groupIds.has(group.id) || !Array.isArray(group.members))
         throw new Error('Agrupamento inválido no arquivo.');
-      if (cityLimit && group.members.length > cityLimit) throw new Error('Um agrupamento excede o limite de varas previsto neste cenário.');
+      if (group.manualSize !== undefined && typeof group.manualSize !== 'boolean') throw new Error('Exceção de tamanho manual inválida.');
+      if (!group.manualSize && group.members.length > maxSize) throw new Error('Um agrupamento excede o limite de varas previsto neste cenário.');
       if (group.manualGeography !== undefined && typeof group.manualGeography !== 'boolean') throw new Error('Exceção geográfica manual inválida.');
       if (geography === 'distance' && !group.manualGeography) checkDistance(rows.filter(row => group.members.includes(row.id)), distanceLimitKm,proximityLimitKm,minNearbyCities);
       groupIds.add(group.id);
@@ -352,7 +337,7 @@ export function validateProject(data) {
         if (!ids.has(id) || members.has(id)) throw new Error('Vara inexistente ou alocada mais de uma vez no cenário.');
         members.set(id, group.id);
       }
-      return {id:group.id, name:validName(group.name,'Nome do agrupamento'), members:[...group.members], ...(group.manualGeography ? {manualGeography:true} : {})};
+      return {id:group.id, name:validName(group.name,'Nome do agrupamento'), members:[...group.members], ...(group.manualGeography ? {manualGeography:true} : {}), ...(group.manualSize ? {manualSize:true} : {})};
     });
     if (cityLimit) {
       for (const block of cities.values()) {

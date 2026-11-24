@@ -52,8 +52,11 @@ test('Cidade inteira, limite de tamanho, persistência e alocação manual', () 
   const assigned = new Set(plan.groups.flatMap(group => group.members));
   assert.equal(assigned.has(rows[0].id),assigned.has(rows[1].id));
   assert.ok(!assigned.has(rows[4].id));
-  assert.throws(() => assignCourt(plan,rows,rows[3].id,plan.groups[0].id),/limite/);
-  assert.throws(() => assignCourt(plan,rows,rows[4].id,plan.groups[0].id),/limite|coordenadas/);
+  assignCourt(plan,rows,rows[3].id,plan.groups[0].id);
+  assert.equal(plan.groups[0].manualSize,true);
+  assignCourt(plan,rows,rows[4].id,plan.groups[0].id);
+  project.rows=rows;
+  assert.equal(validateProject(project).plans[0].groups[0].members.length,5);
   assert.throws(() => propose(rows,100,3,{geography:'distance',distanceLimitKm:NaN}),/distância/);
   assert.equal(propose(validRows,100,2,{geography:'distance',distanceLimitKm:25})[0].members.length,2);
 });
@@ -93,17 +96,17 @@ test('Sugestão regional cobre todas as varas mesmo fora da faixa ideal', () => 
   assert.equal(groups.flatMap(group=>group.members).length,rows.length);
 });
 
-test('Falhas de cobertura não modificam o cenário existente', () => {
+test('Sugestões regionais parciais respeitam capacidade e não alteram a entrada', () => {
   const rows = [row('Belo Horizonte',150),row('Uberlândia',50)];
   rows[1].region = 'Outra região';
   const project = createProject(rows);
   const previous = JSON.stringify(project);
-  assert.throws(() => propose(rows,100,2,{geography:'regions',allowMix:false}), /Nenhuma sugestão parcial|ambas as categorias/);
+  assert.deepEqual(propose(rows,100,2,{geography:'regions',allowMix:false}), []);
   assert.equal(JSON.stringify(project),previous);
   const oversized = [row('Belo Horizonte',150),row('Belo Horizonte',50,1),row('Belo Horizonte',100,2)];
-  assert.throws(() => propose(oversized,100,2,{keepCityTogether:true}), /excede o máximo/);
+  assert.deepEqual(propose(oversized,100,2,{keepCityTogether:true}), []);
   const many = Array.from({length:19},(_,i)=>row('Belo Horizonte',i%2 ? 50 : 150,i));
-  assert.throws(() => propose(many,totals(many).rate,2), /até 9 grupos/);
+  assert.ok(propose(many,totals(many).rate,2).flatMap(g=>g.members).length < many.length);
 });
 
 

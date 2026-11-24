@@ -81,3 +81,17 @@ Publicação solicitada explicitamente pelo usuário. Conferido o estado de `ori
 6. Alteração preparada em commit local. Push na main e publicação aguardam autorização, conforme preferência expressa do usuário de perguntar antes de novo push na main.
 
 7. Usuário autorizou expressamente o push e a publicação na resposta “Sim”.
+
+
+## 24/11/2026 — Desbloqueio de ajustes manuais e cenários parciais
+1. Reproduzidos com testes os bloqueios por tamanho no ajuste manual e por cobertura integral na sugestão regional.
+2. Removida a exigência de cobertura integral na sugestão regional, preservando as restrições automáticas e sinalizando varas sem grupo em ambos os modos.
+3. Ajustes manuais preservam a cidade inteira, dispensam geografia e tamanho máximo; manualSize persiste a exceção de tamanho no JSON e na duplicação, com validação de tipo.
+4. Atualizados textos da interface, documentação e PDF. Testes abrangem salvamento/restauração, limites automáticos, cidade grande, região isolada e resultado vazio.
+5. Verificação: 40 testes passaram; build e sintaxe da aplicação conferidos. Whitespace dos arquivos editados conferido; o bundle PDF contém whitespace emitido pela dependência. Sem verificação em navegador nesta etapa.
+6. Alterações preparadas em commit local; push na main aguarda autorização conforme preferência registrada do usuário.
+
+## 24/11/2026 — Gráfico após alocação manual
+1. Identificados filtros que ocultavam grupos incompletos e grupos intermediários quando havia mais de 12. O salvamento já recalculava o relatório e redesenhava a tela.
+2. Extraída a renderização do gráfico para teste, reproduzidas as duas omissões antes da correção. Agora todos os grupos com média aparecem, com indicação de montagem e marcador neutro para composição incompleta.
+3. Verificados vínculos e remoções manuais: vazio → 150% em montagem → 100% completo → 50% em montagem → vazio. Incluída cobertura para 15 grupos.
